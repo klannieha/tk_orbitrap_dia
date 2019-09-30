@@ -120,9 +120,9 @@ then
 	echo "Chromatogram output is enabled"
 fi
 
-ADVANCED="-use_ms1_traces -rt_extraction_window 600 -extra_rt_extraction_window 100 -mz_correction_function quadratic_regression_delta_ppm" # !! changeit!!
+ADVANCED="-use_ms1_traces -rt_extraction_window 600 -extra_rt_extraction_window 100 -mz_correction_function regression_delta_ppm" # !! changeit!!
 
-EXTRACTION_WINDOW="-mz_extraction_window 20 -mz_extraction_window_unit ppm -mz_extraction_window_ms1 20 -mz_extraction_window_ms1_unit ppm -irt_mz_extraction_window_unit ppm -irt_mz_extraction_window 20"
+EXTRACTION_WINDOW="-mz_extraction_window 15 -mz_extraction_window_unit ppm -mz_extraction_window_ms1 10 -mz_extraction_window_ms1_unit ppm -irt_mz_extraction_window_unit ppm -irt_mz_extraction_window 15"
 
 #CALIBRATION="-Calibration:debug_mz_file ${output}_debug_ppmdiff.txt"
 
