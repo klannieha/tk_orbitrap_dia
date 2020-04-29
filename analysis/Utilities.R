@@ -5,6 +5,7 @@ library(stringr)
 library(dbplyr)
 library(reshape2)
 library(VennDiagram)
+library(Matrix)
 
 #################### Functions for Use ###################
 
@@ -35,9 +36,25 @@ AllPeptides_filter <- function(Peptidesdf){
 }
 
 
-#peptideCountOverObservations <- function(peptidesdf){
-  
-#}
+peptideCountOverObservations <- function(peptidesdf){
+  select_cols <- colnames(peptidesdf)[grep("Identification(.*)", colnames(peptidesdf))]
+  df <- subset(peptidesdf, select = select_cols)
+  counts <- data.frame(Peptide = peptidesdf$Sequence, Found = numeric(length(peptidesdf$Sequence)),
+                       Matched = numeric(length(peptidesdf$Sequence)))
+  s <- lapply(1:nrow(df), function(x){
+    r <- df[x,]
+    found <- r == "By MS/MS"
+    found <- sum(found)
+    matched <- r == "By matching"
+    matched <- sum(matched)
+    c(found, matched)
+  })
+  s <- do.call('rbind', s) %>% as.data.frame(stringsAsFactors=F) %>% as.data.table()
+  colnames(s) <- c("Found", "Matched")
+  counts$Found <- s$Found
+  counts$Matched <- s$Matched
+  return(counts)
+}
 
 
 CommonPeptides <- function(msms_lst){
@@ -88,4 +105,4 @@ CommonPeptideStats <- function(msms_lst, run_ids, column,  mean = T, sd = T, na 
   return(df)
 }
 
-
+# Need to right a function to automate using pairwise comparison for finding a reference run
