@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import multiprocessing as mpu
 import math
-
+import time
 import sys
 import os
 
@@ -50,16 +50,23 @@ def BinSpectrum(spectrumdf, bins):
     binned_spectra[spectrumdf.binned.to_numpy()] = spectrumdf['LibraryIntensity'].to_numpy() #/ max(spectrumdf['LibraryIntensity'].to_numpy())
     return(binned_spectra) 
 
-def NormDotP(spec1, spec2, weights):
+def NormDotP(spec1, spec2, weights, pid):
     """
     spec1	binned spectrum 	peptide-fragment spectrum
     spec2	binned spectrum 	peptide-fragment spectrum
     Returns the cosine similarity of the same peptide between 2 spectra.
     """
-    spec1 = np.multiply(spec1, weights)
+    spec1 = spec1[pid]
+    spec2 = spec2[pid]
+    weights = weights[pid]
+    spec1 = spec1 * weights
+    print("finished adding weights")
+    #spec1 = np.multiply(spec1, weights)
+    #start = time.time()
     dp = cosine_similarity([spec1], [spec2])
-    #cos_sim = dot(spec1, spec2)/(norm(spec1)*norm(spec2))
-    #dp = 1 - spatial.distance.cosine(spec1, spec2)
+    #end = time.time()
+    print("finished dot product")
+    #print("Time used: ", end - start)
     return(dp)
 
 def spitTime(func, params):
