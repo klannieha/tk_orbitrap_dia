@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # All functions
 
 library(data.table)
@@ -665,4 +664,3 @@ annotate_pyprophet <- function(pyprophet_out){
 }
 
 
->>>>>>> a80022048b347092114ab7df6190216195e8af22
