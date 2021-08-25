@@ -6,6 +6,7 @@ library(dbplyr)
 library(reshape2)
 library(VennDiagram)
 library(Matrix)
+library(httr)
 
 #################### Functions for Use ###################
 
@@ -80,8 +81,10 @@ GeneFormat <- function(x){
     p <- gsub("-.*", "", p)
     p <- unique(p)
     p <- sort(p)
-    p <- paste0(p, collapse=";")
-  }
+    if(length(p) > 1){
+      p <- paste0(p, collapse=";")
+    }
+    }
   return(p)
 }
 a <- "Q71U36;Q71U36-2;P68363;P68363-2;Q13748;Q13748-2;Q6PEY2;P68366;P68366-2"
@@ -144,8 +147,8 @@ Peptide_Detection <- function(df, annotation, n){
   methods <- unique(annotation$Condition)
   detection <- lapply(methods, function(x){
     r <- df[Condition == x]
-    r <- r[!duplicated(r, by=c("Sequence", "Replicate"))]
-    r <- dcast(r, Sequence~Replicate, value.var = "Intensity")
+    r <- r[!duplicated(r, by=c("Sequence", "BioReplicate"))]
+    r <- dcast(r, Sequence~BioReplicate, value.var = "Intensity")
     count <- r %>% is.na() %>% rowSums()
     r$Detection <- count
     r$Method <- x
@@ -167,6 +170,15 @@ medNorm <- function(x){
   row.names(y) <- row.names(x)
   return(y)
 }
+
+getCV <- function(x){
+  CV = apply(x, 1, function(y) 100*sd(y, na.rm = T)/mean(y, na.rm = T))
+  mean = apply(x, 1, function(y) mean(y, na.rm = T))
+  x$CV <- CV
+  x$mean <- mean
+  return(x)
+}
+
 
 # Need a function to merge list of dataframes and get mean or sd or na
 
@@ -202,7 +214,9 @@ CommonPeptideStats <- function(msms_lst, run_ids, column,  mean = T, sd = T, na 
 
 reduce_OpenSWATH_output <- function(data, column.names=NULL){
   if(is.null(column.names)){
-    column.names <- c('ProteinName', 'FullPeptideName', 'Sequence', 'Charge', 'aggr_Fragment_Annotation', 'aggr_Peak_Area', 'filename', 'm_score', 'decoy', "Intensity", "RT", "run_id", "transition_group_id")
+    column.names <- c('ProteinName', 'FullPeptideName', 'Sequence', 'Charge', 'aggr_Fragment_Annotation', 
+                      'aggr_Peak_Area', 'filename', 'm_score', 'decoy', "Intensity", "RT", "run_id", 
+                      "transition_group_id", "d_score", "peak_group_rank")
   }
   if(length(column.names) > length(column.names[column.names %in% colnames(data)])){
     col.names.missing <- column.names[!column.names %in% colnames(data)]
@@ -211,7 +225,7 @@ reduce_OpenSWATH_output <- function(data, column.names=NULL){
   }
   # Keep only required columns for MSStats and mapDIA
   if(length(column.names) == length(column.names[column.names %in% colnames(data)])){
-    data.filtered <- data[,..column.names]
+    data.filtered <- data[,column.names]
     return(data.filtered)
   }
 }
@@ -245,4 +259,159 @@ annotate_pyprophet <- function(pyprophet_out){
   return(df)
 }
 
+annotate_MStern <- function(pyprophet_out){
+  df <- data.frame(filename = unique(pyprophet_out$filename),
+                   stringsAsFactors = F)
+  df$Run <- str_extract(df$filename, "R[0-9]+")
+  df$Condition <- str_extract(df$filename, "S[0-9]+")
+  df$BioReplicate <- str_sub(df$filename, start = -10, end = -9)
+  return(df)
+}
 
+library(VennDiagram)
+library(RColorBrewer)
+
+create_venn <- function(data, category_names, category_colours, file = NULL){
+  if((length(data) != length(category_names)) | (length(data) != length(category_colours))){
+    print("Arguments are not of the same length")
+  }else if((length(data) == length(category_names)) & length(data) == length(category_colours)){
+    v1 <- venn.diagram(
+      x = data,
+      scaled=T,
+      area.vector = T,
+      category.names = category_names,
+      fill=category_colours,
+      col = category_colours,
+      filename = file,
+      height = 480 , 
+      width = 480 , 
+      resolution = 300,
+      compression = "lzw",
+      lwd = 2,
+      cex = 2,
+      fontfamily = "sans",
+      cat.cex = 2,
+      cat.default.pos = "outer",
+      cat.fontfamily = "sans",
+      cat.col = category_colours
+    )
+  }
+  grid.newpage()
+  grid.draw(v1)
+}
+
+create_venn <- function(nKeys, BrewerPalette, KeyNames, data){
+  #' nKeys: integer number of categories
+  #' BrewerPalette: string choice of brewer palette
+  #' KeyNames: vector of strings  category names
+  #' data: list of data for venn diagram
+  
+  if(nKeys < 3){
+    catfill <- brewer.pal(3, BrewerPalette)
+    catfill <- sample(catfill, 2)
+  }else{
+    catfill <- brewer.pal(nKeys, BrewerPalette)
+  }
+  v1 <- venn.diagram(
+    x = data,
+    scaled=T,
+    area.vector = T,
+    category.names = KeyNames,
+    fill=catfill,
+    col = catfill,
+    filename = NULL,
+    output = FALSE ,
+    imagetype="png" ,
+    height = 480 , 
+    width = 480 , 
+    resolution = 300,
+    compression = "lzw",
+    lwd = 2,
+    cex = 2,
+    fontfamily = "sans",
+    cat.cex = 2,
+    cat.default.pos = "outer",
+    cat.fontfamily = "sans",
+    cat.col = catfill
+  )
+  grid.newpage()
+  grid.draw(v1)
+  return(v1)
+}
+
+fetchQuery <- function(lst){
+  #'lst vecotr list of ids to be fetched
+  url <- "https://www.uniprot.org/uploadlists/"
+  
+  params = list(
+    from = "ACC+ID",
+    to = "GENENAME",
+    format = "tab",
+    query = paste0(lst, collapse = " ")
+  )
+  r <- httr::POST(url, body = params, encode = "form")
+  #cat(httr::content(r))
+  return(r)
+} 
+
+map2Gene <- function(protein_id){
+  #' protein_id vector list of protein_ids to be mapped to Gene names
+
+  cleanp <- protein_id[!grepl(";", protein_id)] # IDs that are unique, not groups
+  fetch_cleanp <- fetchQuery(cleanp)
+  strsp <- strsplit(content(fetch_cleanp), "\n")[[1]]
+  strsp2 <- strsplit(strsp, "\t")
+  protein_df <- lapply(2:length(strsp), function(x){
+    from <- strsp2[[x]][1]
+    to <- strsp2[[x]][2]
+    c(from, to)
+  })
+  
+  protein_df <- do.call('rbind', protein_df) %>% as.data.table() %>% as.data.table()
+  colnames(protein_df) <- c("ProteinName", "GeneName")
+  protein_df <- protein_df[!duplicated(ProteinName)]
+
+  # got df with unique protein names and genes
+  # this takes too long
+  # change it into canonical and protein groups
+  groupP <- protein_id[grepl(";", protein_id)] # get protein group IDs
+  # test: 2503 IDs
+  groupP.df <- data.frame(Group = groupP, Canonical = character(length = length(groupP)), stringsAsFactors = F)
+  groupP.df$Canonical <- unlist(lapply(groupP, GeneFormat))
+  
+  groupP_noIso <- groupP.df$Canonical[!grepl(";", groupP.df$Canonical)] %>% unique()
+  # test: 1358
+  fetch_noIso <- fetchQuery(groupP_noIso)
+  s <- strsplit(content(fetch_noIso), "\n")[[1]]
+  s2 <- strsplit(s, "\t")
+  s2 <- do.call('rbind', s2[-1])
+  groupP_noIso <- data.frame(ProteinName = s2[,1], GeneName = s2[, 2],
+                             stringsAsFactors = F)
+  groupP_noIso <- as.data.table(groupP_noIso)
+  groupP_noIso <- groupP_noIso[!duplicated(ProteinName)]
+  #groupP.df <- merge(groupP.df, groupP_noIso, by.x = "Canonical", by.y = "ProteinName")
+  
+  groupP <- groupP.df$Canonical[grepl(";", groupP.df$Canonical)] %>% unique()
+  groupP.str <- unique(unlist(strsplit(groupP, ";")))
+  fetch_pg <- fetchQuery(groupP.str)
+  s <- strsplit(content(fetch_pg), "\n")[[1]]
+  s2 <- strsplit(s, "\t")
+  s2 <- do.call('rbind', s2[-1]) %>% as.data.frame()
+  
+  groupP_Iso <- data.frame(ProteinName = groupP, stringsAsFactors = F)
+  GeneNames <- lapply(1:nrow(groupP_Iso), function(x){
+    id <- which(s2[, 1] %in% strsplit(groupP_Iso$ProteinName[x], ";")[[1]])
+    g <- paste0(s2[id,2], collapse = ";")
+    g
+  })
+  GeneNames <- unlist(GeneNames)
+  groupP_Iso$GeneName <- GeneNames
+  groupP_Iso <- distinct_all(groupP_Iso)
+  groupP_allIso <- rbind(groupP_noIso, groupP_Iso)
+  groupP.df <- merge(groupP.df, groupP_allIso, by.x = "Canonical", by.y = "ProteinName", all.x = T)
+  groupP.df$Canonical <- NULL
+  setnames(groupP.df, "Group", "ProteinName")
+
+  proteinGroups <- rbind(groupP.df, protein_df)
+  return(proteinGroups)
+}
