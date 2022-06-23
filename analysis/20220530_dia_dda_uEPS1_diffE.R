@@ -791,11 +791,44 @@ FC.UP <- pep.de %>%
               names_from = "Upgraded", values_from = 'mean') %>%
   mutate(log2FC = `TRUE` - `FALSE`) %>% as.data.table()
 
-FC.UP %>% ggplot(aes(x = log2FC)) + geom_histogram() + plot_theme()
+FC.UP %>% ggplot(aes(x = p.adj.value)) + geom_histogram(bins = 500) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 110)) +
+  plot_theme() +
+  xlab(expression(log[2]*"FC(Upgraded vs Not upgraded)")) +
+  ylab("Peptides (n)")
 
+pep.UP <- pep.de %>% filter(cISUP == 1) %>% mutate(Upgraded = ifelse(pISUP > 1, TRUE, FALSE)) %>%
+  as.data.table()
 
+wt <- lapply(seq_along(FC.UP$peptide_sequence), function(x){
+  p <- FC.UP$peptide_sequence[x]
+  t <- Htest(p, peptide_sequence, "TRUE", "FALSE", Upgraded, pep.UP, intensity_col = log2Intensity) # change it!!
+  t
+})
 
+FC.UP$p.value <- lapply(wt, function(x) x$p.value) %>% unlist()
+FC.UP$p.adj.value <- p.adjust(FC.UP$p.value, method = "fdr")
 
+plot_volcano(FC.UP, pvalue_column = `p.value`, padj_column = `p.adj.value`, FC_column = `log2FC`) +
+  xlab(expression(log[2]*"FC(Upgraded vs ISUP 1)"))
+
+dda.UP <- dda.pep.de %>%
+  filter(cISUP == 1) %>%
+  mutate(Upgraded = ifelse(pISUP > 1, TRUE, FALSE)) %>%
+  group_by(Upgraded,peptide, Gene.names, Protein.names) %>%
+  summarise(mean = mean(Intensity)) %>%
+  pivot_wider(id_cols = c("peptide", "Gene.names", "Protein.names"),
+              names_from = "Upgraded", values_from = 'mean') %>%
+  mutate(log2FC = `TRUE` - `FALSE`) %>% as.data.table()
+dda.pep.UP <- dda.pep.de %>%
+  filter(cISUP == 1) %>%
+  mutate(Upgraded = ifelse(pISUP > 1, TRUE, FALSE))
+
+wt <- lapply(seq_along(dda.UP$peptide), function(x){
+  p <- dda.UP$peptide[x]
+  t <- Htest(p, peptide, "TRUE", "FALSE", Upgraded, dda.pep.UP, intensity_col = Intensity) # change it!!
+  t
+})
 
 
  
