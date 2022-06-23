@@ -830,5 +830,42 @@ wt <- lapply(seq_along(dda.UP$peptide), function(x){
   t
 })
 
+dda.UP$p.value <- lapply(wt, function(x) x$p.value) %>% unlist()
+dda.UP$p.adj.value <- p.adjust(dda.UP$p.value, method = "fdr")
 
- 
+dda.UP %>% ggplot(aes(x = p.adj.value)) + geom_histogram(bins = 500) + plot_theme() 
+
+plot_volcano(dda.UP, pvalue_column = `p.value`, padj_column = `p.adj.value`, FC_column = `log2FC`) +
+  xlab(expression(log[2]*"FC(Upgraded vs ISUP 1)"))
+
+all.UP <- merge(FC.UP, dda.UP, by.x = c("peptide_sequence", "GeneName"),
+                by.y = c("peptide", "Gene.names"), suffixes = c(".DIA", ".DDA"), all = T)
+
+all.UP %>% ggplot(aes(x = log2FC.DDA, y = log2FC.DIA)) +
+  geom_hex(bins = 100) +
+  stat_cor(cor.coef.name = 'rho') +
+  scale_fill_viridis_c(option = "magma", begin = 0.2) +
+  plot_theme() +
+  xlab(expression(log[2]*"FC"[DDA])) +
+  ylab(expression(log[2]*"FC"[DIA])) +
+  scale_x_continuous(limits = c(-4, 6))
+
+all.UP %>% 
+  mutate(Significant = case_when(p.adj.value.DDA < 0.25 & p.adj.value.DIA < 0.25 ~ "Both",
+                                 p.adj.value.DDA < 0.25 & !(p.adj.value.DIA < 0.25) ~ "DDA",
+                                 !(p.adj.value.DDA < 0.25) & p.adj.value.DIA < 0.25~ "DIA")) %>%
+  ggplot(aes(x = log2FC.DDA, y = log2FC.DIA)) +
+  geom_point(aes(color = Significant, alpha = Significant)) +
+  stat_cor(cor.coef.name = 'rho') +
+  scale_color_manual(breaks = c("Both", "DDA", "DIA"), values = c("red", "blue", "purple"), 
+                     name = "FDR < 0.2" ) +
+  scale_alpha_manual(breaks = c("Both", "DDA", "DIA"), values = c(1,1,1), na.value = 0.6, 
+                     name = "FDR < 0.2") +
+  geom_vhlines(xintercept = 0, yintercept = 0) +
+  plot_theme() +
+  xlab(expression(log[2]*"FC"[DDA])) +
+  ylab(expression(log[2]*"FC"[DIA])) +
+  scale_x_continuous(limits = c(-4, 6))
+
+
+
