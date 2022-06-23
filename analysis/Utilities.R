@@ -278,9 +278,9 @@ create_venn <- function(data, category_names, category_colours, file = NULL){
   }else if((length(data) == length(category_names)) & length(data) == length(category_colours)){
     v1 <- venn.diagram(
       x = data,
-      scaled=T,
+      scaled=F,
       euler.d = T,
-      #rotation = 1, 
+      rotation = 1, 
       category.names = category_names,
       fill=category_colours,
       col = category_colours,
@@ -305,45 +305,6 @@ create_venn <- function(data, category_names, category_colours, file = NULL){
   grid.draw(v1)
 }
 
-create_venn <- function(nKeys, BrewerPalette, KeyNames, data){
-  #' nKeys: integer number of categories
-  #' BrewerPalette: string choice of brewer palette
-  #' KeyNames: vector of strings  category names
-  #' data: list of data for venn diagram
-  
-  if(nKeys < 3){
-    catfill <- brewer.pal(3, BrewerPalette)
-    catfill <- sample(catfill, 2)
-  }else{
-    catfill <- brewer.pal(nKeys, BrewerPalette)
-  }
-  v1 <- venn.diagram(
-    x = data,
-    scaled=T,
-    area.vector = T,
-    category.names = KeyNames,
-    fill=catfill,
-    col = catfill,
-    filename = NULL,
-    output = FALSE ,
-    imagetype="png" ,
-    height = 480 , 
-    width = 480 , 
-    resolution = 300,
-    compression = "lzw",
-    lwd = 2,
-    cex = 2,
-    fontfamily = "sans",
-    cat.cex = 2,
-    cat.default.pos = "outer",
-    cat.fontfamily = "sans",
-    cat.dist = c(0.05, 0.05, 0.02),
-    cat.col = catfill
-  )
-  grid.newpage()
-  grid.draw(v1)
-  return(v1)
-}
 
 fetchQuery <- function(lst){
   #'lst vecotr list of ids to be fetched
@@ -738,7 +699,7 @@ iRTs <- iRTs %>%
 colnames(iRTs) <- c("PrecursorMz", "PrecursorCharge", "Sequence", "PeptideID")
 
 # perform wilcoxon / Mann-Whitney U test per protein
-Htest <- function(protein_id,variable, category1, category2, key, df, test = 'utest', logTransform = T){
+Htest <- function(protein_id,variable, category1, category2, key, df, test = 'utest', intensity_col){
   #' protein_id   chr   protein accession of interest
   #' category1    chr   group 1 category e.g. ISUP 1
   #' category2    chr   group 2 category e.g. ISUP 2
@@ -748,15 +709,8 @@ Htest <- function(protein_id,variable, category1, category2, key, df, test = 'ut
   #
   p <- protein_id
   #print(p)
-  if(logTransform){
-    g1 <- df %>% filter({{key}} == category1 & {{variable}} == p) %>% pull(Log2Intensity) %>% as.numeric()
-    g2 <- df %>% filter({{key}} == category2 & {{variable}} == p) %>% pull(Log2Intensity) %>% as.numeric()
-  }else{
-    g1 <- df %>% filter({{key}} == category1 & {{variable}} == p) %>% pull(Intensity) %>% as.numeric()
-  #dim(g1)
-    g2 <- df %>% filter({{key}} == category2 & {{variable}} == p) %>% pull(Intensity) %>% as.numeric()
-  }
-  #dim(g2)
+  g1 <- df %>% filter({{key}} == category1 & {{variable}} == p) %>% pull({{intensity_col}}) %>% as.numeric()
+  g2 <- df %>% filter({{key}} == category2 & {{variable}} == p) %>% pull({{intensity_col}}) %>% as.numeric()
   if(test == 'utest'){
     Ht <- wilcox.test(g1, g2, paired = F)
   }else if(test == 'ttest'){
@@ -800,3 +754,30 @@ calculateProteinlogFC <- function(data, colname, group1, group2){
     as.data.table()
   return(FC)
 }
+
+
+plot_volcano <- function(data, label = F, pvalue_column,padj_column, FC_column, sig_level = 0.05, legends = F){
+  #' data    dataframe with FC and p values
+  #' label   boolean   include labels or not
+  #' add other legends if needed
+  df <- copy(data)
+  
+  df <- df %>% mutate(Sig = ifelse({{padj_column}} < sig_level, TRUE, FALSE)) %>%
+    mutate(Enriched = case_when((Sig & {{FC_column}} > 0) ~ "UP",
+                                (Sig & {{FC_column}} < 0) ~ "DOWN"))
+  df <- df %>% mutate(LABEL = ifelse(Sig, paste(peptide_sequence, GeneName, sep = " * "), NA))
+  p <- df %>%
+      mutate(`-log10(p-value)` = -log10({{pvalue_column}})) %>%
+      ggplot(aes(x = {{FC_column}}, y = `-log10(p-value)`)) +
+      geom_point(aes(color = Enriched), show.legend = legends) +
+      scale_color_manual(breaks = c("UP", "DOWN"), values = c("red", "blue")) +
+      plot_theme()
+
+  if(label){
+    p <- p + geom_label_repel(aes(label = LABEL), max.overlaps = 30)
+  }
+  p
+  return(p)
+}
+ 
+

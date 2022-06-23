@@ -81,4 +81,10 @@ TrainLoess <- function(irt_data){
   return(model)
 }
 
+TrainLoessInt <- function(irt_data){
+  model <- train(y ~ x, irt_data, method = CVloess, 
+                 tuneGrid = fitGrid, tuneLength = NULL,
+                 trControl = fitControl)
+  return(model)
+}
 
