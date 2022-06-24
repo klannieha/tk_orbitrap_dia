@@ -720,15 +720,15 @@ at = rev(seq(0, 0.5, 0.05))
 )
 
 
-pISUP.lst
+pISUP.lst[1]
 
 
-pep.de %>% filter(peptide_sequence %in% pISUP.lst$peptide_sequence[1]) %>%
-  ggplot(aes(x = pISUP, y = log2Intensity, group = pISUP)) +
+dda.pep.de %>% filter(peptide %in% pISUP.lst$peptide_sequence[1]) %>%
+  ggplot(aes(x = pISUP, y = Intensity, group = pISUP)) +
   geom_jitter(width = 0.1, alpha = 0.9) +
   stat_smooth(method = 'loess', aes(group = 1)) +
   geom_boxplot(width = 0.8, alpha = 0.8, outlier.shape = NA) + plot_theme() +
-  annotate("text", label = "FDR", x = 4 , y = 30)
+  ggtitle(paste(pISUP.lst$GeneName[1],pISUP.lst$peptide_sequence[1], sep = " : "))
 
 pdf("D:/projects/pca_urine_spectral_lib/results/20220327_proBatch/20220622_dia_FDR02_pISUP_Log2FC_TrendsInDDA.pdf",
     onefile = T) # change filename!!
@@ -809,7 +809,8 @@ wt <- lapply(seq_along(FC.UP$peptide_sequence), function(x){
 FC.UP$p.value <- lapply(wt, function(x) x$p.value) %>% unlist()
 FC.UP$p.adj.value <- p.adjust(FC.UP$p.value, method = "fdr")
 
-plot_volcano(FC.UP, pvalue_column = `p.value`, padj_column = `p.adj.value`, FC_column = `log2FC`) +
+plot_volcano(FC.UP, pvalue_column = `p.value`, padj_column = `p.adj.value`,
+             FC_column = `log2FC`,label = T, sig_level = 0.25    ) +
   xlab(expression(log[2]*"FC(Upgraded vs ISUP 1)"))
 
 dda.UP <- dda.pep.de %>%
@@ -858,14 +859,25 @@ all.UP %>%
   geom_point(aes(color = Significant, alpha = Significant)) +
   stat_cor(cor.coef.name = 'rho') +
   scale_color_manual(breaks = c("Both", "DDA", "DIA"), values = c("red", "blue", "purple"), 
-                     name = "FDR < 0.2" ) +
+                     name = "FDR < 0.25" ) +
   scale_alpha_manual(breaks = c("Both", "DDA", "DIA"), values = c(1,1,1), na.value = 0.6, 
-                     name = "FDR < 0.2") +
+                     name = "FDR < 0.25") +
   geom_vhlines(xintercept = 0, yintercept = 0) +
   plot_theme() +
   xlab(expression(log[2]*"FC"[DDA])) +
   ylab(expression(log[2]*"FC"[DIA])) +
   scale_x_continuous(limits = c(-4, 6))
 
-
-
+pep.de %>%
+  filter(cISUP == 1) %>%
+  filter(peptide_sequence %in% all.UP[p.adj.value.DIA < 0.3]$peptide_sequence) %>%
+  inner_join(peptideMap[, c("peptide_sequence", "GeneName")], by = "peptide_sequence") %>%
+  distinct(SampleID, peptide_sequence, .keep_all = T) %>%
+  select(log2Intensity, peptide_sequence, cISUP, pISUP, GeneName) %>%
+  mutate(UP = ifelse(pISUP > 1, TRUE, FALSE),
+         Label = paste(GeneName, peptide_sequence, sep = " : ")) %>%
+  ggplot(aes(x = UP, y = log2Intensity)) +
+  geom_jitter(width = 0.1, alpha = 0.6) +
+  geom_boxplot(alpha = 0.8) +
+  facet_wrap(~Label) +
+  theme_classic()
