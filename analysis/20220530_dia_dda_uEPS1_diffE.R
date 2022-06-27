@@ -879,5 +879,28 @@ pep.de %>%
   ggplot(aes(x = UP, y = log2Intensity)) +
   geom_jitter(width = 0.1, alpha = 0.6) +
   geom_boxplot(alpha = 0.8) +
-  facet_wrap(~Label) +
+  facet_wrap(~peptide_sequence) +
   theme_classic()
+
+all.UP %>% arrange(p.adj.value.DDA) %>% top_n(10) %>%
+  ggplot(aes(x = log2FC.DDA)) + geom_histogram()
+
+# look at the significant ones from cISUP 1 vs higher in UP
+all.FC %>% head()
+
+head(all.UP)
+all.UP %>% filter(peptide_sequence %in% all.FC[p.adj.value.DIA.cISUP < 0.05]$peptide_sequence) %>%
+  inner_join(all.FC %>% select(peptide_sequence, GeneName, log2FC.DIA.cISUP, log2FC.DDA.cISUP,
+                               p.adj.value.DIA.pISUP, p.adj.value.DDA.cISUP), 
+             by = c("peptide_sequence", "GeneName")) %>%
+  ggplot(aes(x = log2FC.DIA.cISUP, y = log2FC.DIA)) +
+  geom_point(aes(color = p.adj.value.DIA)) +
+  geom_vhlines(xintercept = 0, yintercept = 0) +
+  geom_label_repel(aes(label = GeneName), max.overlaps = 20) +
+  scale_color_gradient2(midpoint = 0.2, low = "purple", high = "blue", mid = "red", name = "FDR - UP",
+                        limits = c(0, 1)) +
+  xlab(expression(log[2]*"FC (cISUP 2+ /1)")) + 
+  ylab(expression(log[2]*"FC (Upgraded / No upgrade")) + plot_theme() +
+  ggtitle("DIA cISUP 1")
+  
+  
