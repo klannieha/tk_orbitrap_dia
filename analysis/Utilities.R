@@ -8,6 +8,7 @@ library(reshape2)
 library(VennDiagram)
 library(Matrix)
 library(httr)
+library(BoutrosLab.plotting.general)
 
 #################### Functions for Use ###################
 
@@ -780,4 +781,60 @@ plot_volcano <- function(data, label = F, pvalue_column,padj_column, FC_column, 
   return(p)
 }
  
+
+spot.size.function <- function(x) { 0.1 + (2 * abs(x)); }
+spot.colour.function <- function(x) {
+  colours <- rep("white", length(x));
+  colours[sign(x) == -1] <- default.colours(2, palette.type = "dotmap")[1];
+  colours[sign(x) == 1] <- default.colours(2, palette.type = "dotmap")[2];
+  return(colours);
+}
+# create dot map using BPG
+plot_dotmap <- function(dataset, effectSize_col, background_col, xlabs, yaxis.lab, bgBins = seq(0, 0.1, 0.01)){
+  #' This function is to create dotmap using BPG creat.dotmap function
+  #' effectSize_col   vector of chr   column names of the effect size
+  #' dataset          dataframe       df to plot
+  #' backgroun_col    vector of chr   column names of the p values
+  #' xlabs            vector of chr   column labels
+  #' yaxis.lab        vector of chr   row names on dot map
+  #' bgBins           vector of num   breaks for background colors
+
+  dm <- create.dotmap(subset(dataset, select = effectSize_col),
+              yaxis.cex = 1.5,
+              xaxis.cex = 1.5,
+              na.pch = 1,
+              na.spot.size = 0,
+              yaxis.lab = yaxis.lab,
+              xaxis.lab = xlabs, 
+              spot.size.function = spot.size.function,
+              spot.colour.function = spot.colour.function,
+              key = list(
+                space = "right",
+                points = list(
+                  cex = spot.size.function(seq(-1, 1, 0.2)),
+                  col = spot.colour.function(seq(-1, 1,0.2)),
+                  pch = 19
+                ),
+                text = list(
+                  lab = as.character(seq(-1, 1, 0.2)),
+                  cex = 1.5,
+                  adj = 1.0,
+                  fontface = "bold"
+                )
+              ),
+              # control spacing at top of key
+              key.top = 1,
+              pch = 21,
+              pch.border.col = "white",
+              # add the background
+              bg.data = subset(dataset, select = background_col),
+              # add a colourkey
+              colourkey = TRUE,
+              # set colour scheme for background data
+              colour.scheme = c("black", "white"),
+              # make bg colour scheme a discrete colour scheme, with breaks at these places
+              at = bgBins)
+
+  return(dm)
+}
 
