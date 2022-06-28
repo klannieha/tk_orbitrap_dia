@@ -889,18 +889,68 @@ all.UP %>% arrange(p.adj.value.DDA) %>% top_n(10) %>%
 all.FC %>% head()
 
 head(all.UP)
-all.UP %>% filter(peptide_sequence %in% all.FC[p.adj.value.DIA.cISUP < 0.05]$peptide_sequence) %>%
-  inner_join(all.FC %>% select(peptide_sequence, GeneName, log2FC.DIA.cISUP, log2FC.DDA.cISUP,
+all.UP %>% filter(peptide_sequence %in% all.FC[p.adj.value.DDA.cISUP < 0.20]$peptide_sequence) %>%
+  inner_join(all.FC %>% select(peptide_sequence, GeneName, log2FC.DIA.pISUP, log2FC.DDA.cISUP,
                                p.adj.value.DIA.pISUP, p.adj.value.DDA.cISUP), 
              by = c("peptide_sequence", "GeneName")) %>%
-  ggplot(aes(x = log2FC.DIA.cISUP, y = log2FC.DIA)) +
-  geom_point(aes(color = p.adj.value.DIA)) +
+  ggplot(aes(x = log2FC.DDA.cISUP, y = log2FC.DDA)) +
+  geom_point(aes(color = p.adj.value.DDA)) +
   geom_vhlines(xintercept = 0, yintercept = 0) +
-  geom_label_repel(aes(label = GeneName), max.overlaps = 20) +
-  scale_color_gradient2(midpoint = 0.2, low = "purple", high = "blue", mid = "red", name = "FDR - UP",
+  #geom_label_repel(aes(label = GeneName), max.overlaps = 20) +
+  scale_color_gradient2(midpoint = 0.2, low = "red", high = "blue", mid = "red", name = "FDR - UP",
                         limits = c(0, 1)) +
-  xlab(expression(log[2]*"FC (cISUP 2+ /1)")) + 
-  ylab(expression(log[2]*"FC (Upgraded / No upgrade")) + plot_theme() +
-  ggtitle("DIA cISUP 1")
+  xlab(expression(log[2]*"FC (pISUP 2+ /1)")) + 
+  ylab(expression(log[2]*"FC (Upgraded / No upgrade)")) + plot_theme() +
+  ggtitle("DDA cISUP 1")
   
+
+
+all.UP %>%
+  select(log2FC.DIA, log2FC.DDA) %>%
+  pivot_longer(cols = c("log2FC.DIA", "log2FC.DDA"), names_to = "Method", values_to = "log2FC") %>%
+  mutate(Method = gsub("log2FC\\.", "", Method)) %>%
+  filter(!is.na(log2FC)) %>%
+  ggplot(aes(x = log2FC)) +
+  geom_histogram(aes(fill = Method), bins = 100, position = position_dodge()) +
+  plot_theme() +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(expand = c(0,0)) +
+  theme(legend.position = c(0.8, 0.8)) +
+  xlab(expression(log[2]*"FC (Upgraded)")) +
+  ylab("Peptides (n)")
   
+
+UP_dataset <- all.UP %>%
+  inner_join(all.FC %>% select(peptide_sequence, GeneName, log2FC.DIA.pISUP, log2FC.DIA.cISUP,
+                               log2FC.DDA.cISUP, log2FC.DDA.pISUP,
+                               p.adj.value.DIA.pISUP,p.adj.value.DIA.cISUP,
+                               p.adj.value.DDA.cISUP, p.adj.value.DDA.pISUP), 
+             by = c("peptide_sequence", "GeneName"))
+
+head(UP_dataset)
+
+
+plot_dotmap(UP_dataset[p.adj.value.DIA < 0.3], effectSize_col = c("log2FC.DIA", "log2FC.DIA.pISUP"),
+            background_col = c("p.adj.value.DIA", "p.adj.value.DIA.pISUP"),
+            xlabs = c("Upgrade", "pISUP"), 
+            yaxis.lab = paste(UP_dataset[p.adj.value.DIA < 0.3]$GeneName, UP_dataset[p.adj.value.DIA.pISUP < 0.3]$peptide_sequence, sep = " * " ),
+            bgBins = seq(0, 0.3, 0.01))
+
+
+plot_dotmap(all.UP[p.adj.value.DIA < 0.3], effectSize_col = c("log2FC.DIA", "log2FC.DDA"),
+            background_col = c("p.adj.value.DIA", 'p.adj.value.DDA'),
+            xlabs = c("DIA", "DDA"),
+            yaxis.lab = paste(all.UP[p.adj.value.DIA < 0.3]$GeneName, all.UP[p.adj.value.DIA < 0.3]$peptide_sequence, sep = " * "),
+            bgBins = seq(0, 0.3, 0.01))
+
+
+dda.pep.de %>%
+  filter(cISUP == 1) %>%
+  filter(peptide %in% all.UP[p.adj.value.DIA < 0.3]$peptide_sequence) %>%
+  mutate(UP = ifelse(pISUP > 1, TRUE, FALSE),
+         Label = paste(Gene.names, peptide, sep = " * ")) %>%
+  ggplot(aes(x = UP, group = UP, y = Intensity)) +
+  geom_jitter(width = 0.1, alpha = 0.8) +
+  geom_boxplot(width = 0.8, alpha = 0.8) +
+  facet_wrap(~Label) +
+  theme_classic()
