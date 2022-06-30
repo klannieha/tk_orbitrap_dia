@@ -1191,9 +1191,14 @@ legend1 <- legend.grob(
   between.col = c(1.6, 1.6, 1, 1.6)
 )
 
-sumDF
+sumDF$Rank <- as.integer(sumDF$Rank)
 g.count
-bpg.count <- create.barplot(formula = `medianCount` ~ `Rank`, data = sumDF, xaxis.lab = sumDF$Rank)
+bpg.count <- create.scatterplot(formula = medianCount ~ Rank, 
+                                data = sumDF, 
+                                type = c("p", "h"), xat = seq(1, 10))
+bpg.count
+
+
 create.multiplot(plot.objects = list(covariate.bar, bpg.count),
                  plot.layout = c(1,4),
                  xaxis.cex = 1.3,
