@@ -802,8 +802,9 @@ chromPoints.df.peptide <- chromPoints.df %>%
   group_by(Condition, BioReplicate, Sequence, filename) %>%
   arrange(desc(MeanPoints)) %>%
   distinct(Condition, BioReplicate, Sequence, .keep_all = T) %>%
-  mutate(BioReplicate = as.integer(BioReplicate))
+  mutate(BioReplicate = as.integer(BioReplicate)) %>% ungroup()
 
+chromPoints.df.peptide <- as.data.table(chromPoints.df.peptide)
 g <- chromPoints.df.peptide %>%
   inner_join(Methodopt120.annotate %>% 
                mutate(filename = basename(filename)), by = "filename") %>%
@@ -1176,41 +1177,87 @@ size.leg <- list(colours = size.colors, labels = c("14", "16", "20", "24", "Mult
 range.leg <- list(colours = range.colors, labels = c("600", "500"), title = "Mass \nrange (m/z)")
 energy.leg <- list(colours = energy.colors, labels = c("27", "stepped"), title = "NCE")
 
-covariate.legends <- list(legend = placement.leg, legend = size.leg,
-                          legend = range.leg, legend = energy.leg)
+covariate.legends <- list(legend = placement.leg, 
+                          legend = range.leg,
+                          legend = size.leg,
+                          legend = energy.leg)
 
 legend1 <- legend.grob(
   covariate.legends,
   size = 1.25,
   label.cex = 0.75,
   title.cex = 0.75,
-  layout = c(length(covariate.legends), 1),
+  layout = c(1,length(covariate.legends)),
   # add black box around legend
   border = list(col = "black", lwd = 3, lty = 1),
-  border.padding = 1.5,
-  between.col = c(1.6, 1.6, 1, 1.6)
+  border.padding = 1.5
 )
 
 sumDF$Rank <- as.integer(sumDF$Rank)
+sumDF$Rank <- as.numeric(sumDF$Rank)
+sumDF$Rank <- factor(sumDF$Rank)
 g.count
 bpg.count <- create.scatterplot(formula = medianCount ~ Rank, 
                                 data = sumDF, 
-                                type = c("p", "h"), xat = seq(1, 10))
+                                type = c("p",'h'), xat = seq(1, 10))
+bpg.count <- create.barplot(medianCount ~ Rank, data = sumDF, xat = seq(1, 10))
 bpg.count
+bpg.CT <- create.barplot(MedianCT~Rank,data = sumDF,  xat = sumDF$Rank)
+bpg.CT 
+
+sumChrom <- merge(chromPoints.df.peptide, Methodopt120.annotate %>%
+                    mutate(filename = basename(filename)), by = "filename")
+
+head(sumChrom)
+
+sumChrom <- merge(sumChrom, sumDF, by.x = c("Range", "WindowSize", "Placement", "NCE", "ID"),
+                  by.y = c("Range", "WindowSize", "Placement", "NCE", "ID"))
+
+bpg.PointsBoxPlot <- create.boxplot(MeanPoints~factor(Rank), data = sumChrom, add.stripplot = TRUE,
+               points.pch = 1 , jitter.factor = 0.5)
+bpg.PointsBoxPlot
+bpg.PointsVioin <- create.violinplot(MeanPoints~factor(Rank), data = sumChrom)
+
+sumCV <- merge(Methodopt120.CV, Methodopt120.annotate %>%
+                 distinct(Condition, Range,WindowSize, Placement, NCE, ID), by = "Condition")
+
+sumCV <- merge(sumCV, sumDF, by = c("Range", "WindowSize", "Placement", "NCE", "ID"))
+sumCV$Condition.x %>% unique()
+
+bpg.CV <- create.boxplot(CV ~ factor(Rank), data = sumCV, add.stripplot = T, points.pch = 1, jitter.factor = 0.5)
 
 
-create.multiplot(plot.objects = list(covariate.bar, bpg.count),
-                 plot.layout = c(1,4),
-                 xaxis.cex = 1.3,
-                 xaxis.alternating = 0, yaxis.alternating = 0,
-                 ylab.label = c("Peptide count"),
-                 yaxis.cex = 1.3, ylab.cex = 1.6, ylab.padding = 5,
+
+# ultimately:
+# 1. peptide count
+# 2. Cycle time
+# 3. Points per peak
+# 4. CVs
+# Covariate
+
+
+create.multiplot(plot.objects = list(covariate.bar,bpg.CV, bpg.PointsVioin, bpg.CT, bpg.count),
+                 plot.layout = c(1,5),
+                 xaxis.cex = 1.3,yaxis.cex = 1.3,
+                 main.x = 'Rank',
+                 main.key.padding = 4,
+                 ylab.cex = 1.3,
+                 ylab.padding = 6,
+                 xaxis.alternating = 0, yaxis.alternating = 0, 
+                 yat = list(1:5, seq(0, 200 , 50), seq(0, 150, 40), seq(0, 3.8, 0.5), seq(0, 17000, 2000) ),
+                 yaxis.labels = list(NULL, seq(0, 150, 50), seq(0, 120, 40), seq(0, 3.8, 0.5), seq(0, 17000, 2000)),
+                 ylab.label = rev(c("\t", "CV \n(%)","\t", "Points\n per peak","\t", "Cycle \ntime (s)", "\t",
+                                    'Peptide \ncount')),
                  x.relation = 'free', y.relation = 'free',
-                 panel.heights = c(1, 0.2), y.spacing = 0.5,
-                 bottom.padding = 15, print.new.legend = T, 
-                 legend = list(inside = list(
+                 panel.heights = c(1, 1, 1,1, 0.3), 
+                 y.spacing = c(0.5, 0.5, 0.5, 0.5),
+                 print.new.legend = T,
+                 legend = list(right = list(
                    fun = legend1,
                    x = 0.5,
                    y = -0.1,
-                   corner = c(0.5, 0.5))))
+                   corner = c(0.5, 0.5))),
+                 filename = "D:/projects/pca_urine_spectral_lib/results/20211130_ALL_MStern_Figures/20220705_dia_120min_Method_Covariate.pdf",
+                 width = 8.5,
+                 height = 11)
 
