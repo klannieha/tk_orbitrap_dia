@@ -1197,12 +1197,14 @@ sumDF$Rank <- as.integer(sumDF$Rank)
 sumDF$Rank <- as.numeric(sumDF$Rank)
 sumDF$Rank <- factor(sumDF$Rank)
 g.count
-bpg.count <- create.scatterplot(formula = medianCount ~ Rank, 
-                                data = sumDF, 
-                                type = c("p",'h'), xat = seq(1, 10))
-bpg.count <- create.barplot(medianCount ~ Rank, data = sumDF, xat = seq(1, 10))
+sumDF$medianCount <- as.numeric(sumDF$medianCount)
+
+bpg.count <- create.barplot(medianCount ~ Rank, data = sumDF, xat = seq(1, 10), 
+                            yat = seq(0, 16500, 4000), yaxis.lab = seq(0, 16500, 4000),
+                            ylimits = c(0, 16000))
 bpg.count
-bpg.CT <- create.barplot(MedianCT~Rank,data = sumDF,  xat = sumDF$Rank)
+bpg.CT <- create.barplot(MedianCT~Rank,data = sumDF,  xat = sumDF$Rank,
+                         ylimits = c(0, 3.8), yat = seq(0, 3.8, 0.5) )
 bpg.CT 
 
 sumChrom <- merge(chromPoints.df.peptide, Methodopt120.annotate %>%
@@ -1214,9 +1216,13 @@ sumChrom <- merge(sumChrom, sumDF, by.x = c("Range", "WindowSize", "Placement", 
                   by.y = c("Range", "WindowSize", "Placement", "NCE", "ID"))
 
 bpg.PointsBoxPlot <- create.boxplot(MeanPoints~factor(Rank), data = sumChrom, add.stripplot = TRUE,
-               points.pch = 1 , jitter.factor = 0.5)
+               points.pch = 1 , jitter.factor = 0.5,
+               abline.h = max(sumDF$MedianPt), abline.lty = "dotted", abline.lwd = 2,
+               abline.col = 'red')
 bpg.PointsBoxPlot
-bpg.PointsVioin <- create.violinplot(MeanPoints~factor(Rank), data = sumChrom)
+bpg.PointsVioin <- create.violinplot(MeanPoints~factor(Rank), 
+                                     data = sumChrom)
+bpg.PointsVioin
 
 sumCV <- merge(Methodopt120.CV, Methodopt120.annotate %>%
                  distinct(Condition, Range,WindowSize, Placement, NCE, ID), by = "Condition")
@@ -1224,9 +1230,14 @@ sumCV <- merge(Methodopt120.CV, Methodopt120.annotate %>%
 sumCV <- merge(sumCV, sumDF, by = c("Range", "WindowSize", "Placement", "NCE", "ID"))
 sumCV$Condition.x %>% unique()
 
-bpg.CV <- create.boxplot(CV ~ factor(Rank), data = sumCV, add.stripplot = T, points.pch = 1, jitter.factor = 0.5)
+bpg.CV <- create.boxplot(CV ~ factor(Rank), data = sumCV, add.stripplot = T, 
+                         points.pch = 1, jitter.factor = 0.5,
+                         abline.h = min(sumDF$medianCV), 
+                         abline.lty = "dotted", abline.lwd = 2, abline.col = "red",
+                         yat = seq(0, 200, 25), 
+                         yaxis.lab = c(0, "", 50, "", 100, "", 150, "" ))
 
-
+bpg.CV
 
 # ultimately:
 # 1. peptide count
@@ -1236,7 +1247,8 @@ bpg.CV <- create.boxplot(CV ~ factor(Rank), data = sumCV, add.stripplot = T, poi
 # Covariate
 
 
-create.multiplot(plot.objects = list(covariate.bar,bpg.CV, bpg.PointsVioin, bpg.CT, bpg.count),
+### Barplot did not start at zero!!!!!
+create.multiplot(plot.objects = list(covariate.bar,bpg.CV, bpg.PointsBoxPlot, bpg.CT, bpg.count),
                  plot.layout = c(1,5),
                  xaxis.cex = 1.3,yaxis.cex = 1.3,
                  main.x = 'Rank',
@@ -1244,8 +1256,8 @@ create.multiplot(plot.objects = list(covariate.bar,bpg.CV, bpg.PointsVioin, bpg.
                  ylab.cex = 1.3,
                  ylab.padding = 6,
                  xaxis.alternating = 0, yaxis.alternating = 0, 
-                 yat = list(1:5, seq(0, 200 , 50), seq(0, 150, 40), seq(0, 3.8, 0.5), seq(0, 17000, 2000) ),
-                 yaxis.labels = list(NULL, seq(0, 150, 50), seq(0, 120, 40), seq(0, 3.8, 0.5), seq(0, 17000, 2000)),
+                 yat = list(1:5, seq(0, 200 , 25), seq(0, 120, 40), seq(0, 3.8, 0.5), seq(0, 16500, 4000) ),
+                 yaxis.labels = list(NULL, c(0, "", 50, "", 100, "", 150, ""), seq(0, 120, 40), seq(0, 3.8, 0.5), seq(0, 16500, 4000)),
                  ylab.label = rev(c("\t", "CV \n(%)","\t", "Points\n per peak","\t", "Cycle \ntime (s)", "\t",
                                     'Peptide \ncount')),
                  x.relation = 'free', y.relation = 'free',
@@ -1256,8 +1268,8 @@ create.multiplot(plot.objects = list(covariate.bar,bpg.CV, bpg.PointsVioin, bpg.
                    fun = legend1,
                    x = 0.5,
                    y = -0.1,
-                   corner = c(0.5, 0.5))),
-                 filename = "D:/projects/pca_urine_spectral_lib/results/20211130_ALL_MStern_Figures/20220705_dia_120min_Method_Covariate.pdf",
+                   corner = c(0.5, 0.5), labels = NULL)),
+                 filename = "D:/projects/pca_urine_spectral_lib/results/20211130_ALL_MStern_Figures/20220706_dia_120min_Method_Covariate.pdf",
                  width = 8.5,
                  height = 11)
 
