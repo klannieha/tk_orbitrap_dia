@@ -6,6 +6,7 @@ library(ggrepel)
 library(ggpmisc)
 library(topGO)
 library(org.Hs.eg.db)
+library(BoutrosLab.plotting.general)
 
 # load data from RData
 
@@ -58,16 +59,21 @@ write.table(dia.GeneExp,
 
 # getting the named list
 head(dia.GeneList)
-dia.GeneList <- dia.gPro$p.value.DIA.cISUP
+dia.GeneList <- dia.gPro$p.adj.value.DIA.cISUP
 names(dia.GeneList) <- dia.gPro$GeneName
 #dia.GeneList <- dia.GeneList[1:10]
 
 # assigning geneSel function
 topDiffGenes <- function(score){
-  return(score < 0.01)
+  return(score < 0.05) # changed from 0.01 FDR to 0.05 FDR for more interesting genes
 }
 
-dia.GeneLst <- head(dia.GeneLst)
+colMap <- function(x) {
+  .col <- rep(rev(heat.colors(length(unique(x)))), time = table(x))
+  return(.col[match(1:length(x), order(x))])
+}
+
+#dia.GeneLst <- head(dia.GeneLst)
 top10 <- dia.gPro[p.adj.value.DIA.cISUP < 0.01]$GeneName %>% unique()
   
 # formatting named list of GO term and gene name mapping
@@ -76,7 +82,7 @@ map <- annFUN.org("BP", mapping = "org.Hs.eg.db", ID = "symbol")
 gene2Go <- inverseList(map)
 head(map)
 head(gene2Go)
-sampleGO <- new("topGOdata", ontology = "BP", allGenes = dia.GeneLst, 
+sampleGO <- new("topGOdata", ontology = "BP", allGenes = dia.GeneList, 
                 geneSel = topDiffGenes,
                 annot = annFUN.gene2GO, gene2GO = gene2Go)
 
@@ -89,6 +95,43 @@ resultKS
 resultKS.elim <- runTest(sampleGO, algorithm = "elim", statistic = "ks")
 resultKS.elim
 
-GenTable(sampleGO,  classicFisher = resultFisher,
+res.dt <- GenTable(sampleGO,  classicFisher = resultFisher,
          classicKS = resultKS, elimKS = resultKS.elim,
-         orderBy = "elimKS", ranksOf = "classicFisher", topNodes = 10)
+         orderBy = "elimKS", ranksOf = "classicFisher", topNodes = 20)
+
+# p-values
+pV.classic <- score(resultFisher)
+pV.adj.classic <- p.adjust(pV.classic, method = "BH")
+pV.KS <- score(resultKS)
+pV.adj.KS <- p.adjust(pV.KS, method = "BH")
+pV.KSelim <- score(resultKS.elim)
+pV.adj.KSelim <- p.adjust(pV.KSelim, method = "BH")
+# summarise the statistics
+gStat <- termStat(sampleGO, names(pV.classic))
+gStat
+gSize <- gStat$Annotated / max(gStat$Annotated) * 4
+gSize
+gCol <- colMap(gStat$Significant)
+
+plot(pV.classic, pV.KSelim, xlab = "p-value classic", ylab = "p-value elim",
+     pch = 19, cex = gSize, col = gCol)
+
+
+res.dt
+sel.go <- names(pV.classic)[pV.KSelim < pV.classic]
+sel.go
+
+cbind(termStat(sampleGO, sel.go),
+      elim = pV.KSelim[sel.go],
+      classic = pV.classic[sel.go])
+
+# adjust for the p.values
+res.dt$adj.p.value.classic <- pV.adj.classic[res.dt$GO.ID]
+res.dt$adj.p.value.KS <- pV.adj.KS[res.dt$GO.ID]
+res.dt$adj.p.value.elim <- pV.adj.KSelim[res.dt$GO.ID]
+
+# plot
+create.heatmap(
+  x = res.dt[1:10, "adj.p.value.elim"],
+  clustering.method = "none"
+)
