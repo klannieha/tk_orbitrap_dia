@@ -1,0 +1,10 @@
+N:\Urine_proteome\uEPS1\UP000202_01_uncalibrated.mgf
+N:\Urine_proteome\uEPS1\UP000402_01_uncalibrated.mgf
+N:\Urine_proteome\uEPS1\UP000602_01_uncalibrated.mgf
+N:\Urine_proteome\uEPS1\UP001103_01_uncalibrated.mgf
+N:\Urine_proteome\uEPS1\UP001503_01_uncalibrated.mgf
+N:\Urine_proteome\uEPS1\UP002102_01_uncalibrated.mgf
+N:\Urine_proteome\uEPS1\UP002703_01_uncalibrated.mgf
+N:\Urine_proteome\uEPS1\UP002803_01_uncalibrated.mgf
+N:\Urine_proteome\uEPS1\UP003503_01_uncalibrated.mgf
+N:\Urine_proteome\uEPS1\UP004003_01_uncalibrated.mgf

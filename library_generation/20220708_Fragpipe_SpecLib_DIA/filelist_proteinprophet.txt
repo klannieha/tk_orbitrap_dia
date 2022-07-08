@@ -1,0 +1,10 @@
+D:\Data\Annie\20220708_Fragpipe_SpecLib_DIA\interact-UP000202_01.pep.xml
+D:\Data\Annie\20220708_Fragpipe_SpecLib_DIA\interact-UP000402_01.pep.xml
+D:\Data\Annie\20220708_Fragpipe_SpecLib_DIA\interact-UP000602_01.pep.xml
+D:\Data\Annie\20220708_Fragpipe_SpecLib_DIA\interact-UP001103_01.pep.xml
+D:\Data\Annie\20220708_Fragpipe_SpecLib_DIA\interact-UP001503_01.pep.xml
+D:\Data\Annie\20220708_Fragpipe_SpecLib_DIA\interact-UP002102_01.pep.xml
+D:\Data\Annie\20220708_Fragpipe_SpecLib_DIA\interact-UP002703_01.pep.xml
+D:\Data\Annie\20220708_Fragpipe_SpecLib_DIA\interact-UP002803_01.pep.xml
+D:\Data\Annie\20220708_Fragpipe_SpecLib_DIA\interact-UP003503_01.pep.xml
+D:\Data\Annie\20220708_Fragpipe_SpecLib_DIA\interact-UP004003_01.pep.xml
