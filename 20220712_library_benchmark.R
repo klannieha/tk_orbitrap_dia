@@ -49,13 +49,17 @@ head(tpp.lib)
 
 tpp.lib %>% distinct(PeptideSequence) %>% summarise(Count = n())
 tpp.lib %>% distinct(FullUniModPeptideName, PrecursorCharge) %>% summarise(Count = n())
-tpp.pr <- tpp.lib %>% distinct(FullUniModPeptideName, PrecursorCharge) %>% 
+tpp.pr <- tpp.lib %>% distinct(ModifiedPeptideSequence, PrecursorCharge) %>% 
   summarise(Count = n())
+tpp.pr
+tpp.tr <- tpp.lib %>% distinct(TransitionGroupId) %>% summarise(Count = n())
 
-
+head(tpp.lib)
 head(mq.peptides)
 tail(mq.allPeptides)
+head(mq.lib)
 mq.lib %>% distinct(Sequence) %>% summarise(Count = n())
+mq.lib %>% distinct(Library.entry.index) %>% summarise(Count = n())
 mq.peptides %>% distinct(Sequence) %>% summarise(Count = n())
 mq.allPeptides %>% filter(!is.na(Sequence)) %>% distinct(Charge, Modified.sequence)
 head(mq.evidence)
@@ -63,6 +67,8 @@ head(mq.evidence)
 mq.evidence %>% distinct(Modified.sequence, Charge) %>% summarise(Count = n())
 
 mq.pr <- mq.lib %>% distinct(Modified.sequence, Precursor.charge) %>% summarise(Count = n())
+mq.pr
+
 
 # plot peptide count
 
@@ -169,22 +175,17 @@ folder
 
 dia.folder <- list.dirs("D:/projects/pca_urine_spectral_lib/data/openswath/20220714_libray_benchmark_osw/",
                         full.names = T)
+fragpipe.14mz <- list.files(dia.folder[2], pattern = "diann-output.tsv", recursive = T, full.names = T)
 
 dia.folder
-fragpipe.dia <- list.files(folder[5], full.names = T, recursive = T)
+fragpipe.dia <- list.files(folder[5], pattern = "output.tsv",  full.names = T, recursive = T)
 mq.dia <- list.files(paste0(folder[3], "/combined_dia/txt/"), full.names = T)
 mq.dia
 
-fragpipe.dia.rep1 <- read.table(fragpipe.dia[7], header = T, sep = "\t")
-fragpipe.dia.rep2 <- read.table(fragpipe.dia[16], header = T, sep = "\t")
-fragpipe.dia.rep3 <- read.table(fragpipe.dia[25], header = T, sep = "\t")
+fragpipe.dia <- lapply(fragpipe.dia, fread)
+fragpipe.dia <- do.call('rbind', fragpipe.dia) %>% as.data.table()
 
-head(fragpipe.dia.rep1)
-
-fragpipe.dia <- rbind(fragpipe.dia.rep1, fragpipe.dia.rep2, fragpipe.dia.rep3)
-remove(fragpipe.dia.rep1)
-remove(fragpipe.dia.rep2)
-remove(fragpipe.dia.rep3)
+fragpipe.dia$Run <- str_sub(fragpipe.dia$Run, -2 , 1)
 
 head(fragpipe.dia)
 
@@ -307,9 +308,11 @@ osw %>%
   geom_boxplot(alpha = 0.6) +
   plot_theme()
 
+
+
 # load tpp library, analyzed with diann
 dia.folder
-tpp_diann <- list.files(dia.folder[2], recursive = T, pattern = "diann-output.tsv", full.names = T)
+tpp_diann <- list.files(dia.folder[3], recursive = T, pattern = "diann-output.tsv", full.names = T)
 tpp_diann
 
 tpp_diann <- lapply(tpp_diann, fread)
@@ -321,6 +324,7 @@ tpp_diann %>%
   ggplot(aes(x = Run , y = PeakWidth)) +
   geom_jitter(width = 0.1, alpha = 0.6) +
   geom_boxplot()
+
 dia.folder
 fragpipe.dia <- list.files(dia.folder[6], recursive = T, # CHANGE IT ###
                               pattern = 'diann-output.tsv', full.names = T)
@@ -354,7 +358,7 @@ fragpipe.xic %>% filter(MS.Level == 2) %>%
 
 test <- fragpipe.xic %>% 
   filter(MS.Level == 2 & File.Name == "D:\\Data\\Annie\\20211219_MStern_DIA\\20201219_16mz_staggered_45min_02.mzML") %>%
-  filter(Precursor.Id == "TPVISGGPYEYR2" & Intensities != 0)
+  filter(Precursor.Id == "ADVTPADFSEWSK2" & Intensities != 0)
   
 test$SumInt <- rowSums(test[, 15:115])
 test <- test[SumInt > 1]
@@ -415,6 +419,13 @@ head(diann.peptides)
 diann.CV <- getCV(as.data.table(diann.peptides))
 diann.CV$Sequence <- rownames(diann.peptides)
 
+tpp_diann.peptides <- diann_matrix(tpp_diann, id.header = "Stripped.Sequence")
+tpp_diann.CV <- getCV(as.data.table(tpp_diann.peptides))
+tpp_diann.CV$Sequence <- rownames(tpp_diann.peptides)
+head(tpp_diann.CV)
+
+ggplot(tpp_diann.CV, aes(x = CV)) + geom_density()
+median(tpp_diann.CV$CV, na.rm = T)
 
 # Quant for OSW -----------------------------------------------------------
 
@@ -446,9 +457,39 @@ osw.peptides <- dcast(osw.peptides, peptide_sequence~run_id,
 head(osw.peptides)
 osw.CV <- getCV(osw.peptides[, 2:4])
 osw.CV$Sequence <- osw.peptides$peptide_sequence
+osw %>% 
+  mutate(PeakWidth = rightWidth - leftWidth) %>% 
+  filter(PeakWidth > 100) %>% 
+  distinct(Sequence, ProteinName)
 
 
 # Compare quant -----------------------------------------------------------
 
+CVs <- merge(diann.CV, osw.CV, by = "Sequence", suffixes = c(".Fragpipe", ".OSW"))
+CVs %>%
+  ggplot(aes(x = log2(mean.OSW), y = log2(mean.Fragpipe))) +
+  geom_point() +
+  stat_cor(cor.coef.name = "rho") + plot_theme() +
+  xlab("OpenSWATH") + ylab("Fragpipe (DIANN)") +
+  ggtitle(expression(log[2]*"(Peptide Intensity)"))
+
+CVs %>% 
+  ggplot(aes(x = log2(mean.Fragpipe), y = CV.Fragpipe)) +
+  geom_point()
+
+CVs %>%
+  pivot_longer(cols = c("CV.Fragpipe", "CV.OSW"), names_to = "Algorithm", values_to = "CV") %>%
+  mutate(Algorithm = gsub("CV\\.", "", Algorithm)) %>%
+  ggplot(aes(x = CV, fill = Algorithm)) +
+  geom_density(alpha = 0.6, color = "lightgrey") +
+  scale_fill_brewer(palette = "Set1") +
+  # ggplot(aes(x = Algorithm, y = CV)) +
+  # geom_jitter(width = 0.1, alpha = 0.6) +
+  # geom_boxplot(alpha = 0.8, width = 0.3) +
+  plot_theme() + theme(legend.position = c(0.8, 0.8))
+
+CVs %>% 
+  summarise(MedianDiann = median(CV.Fragpipe, na.rm = T),
+            MedianOSW = median(CV.OSW, na.rm = T))
 
 
