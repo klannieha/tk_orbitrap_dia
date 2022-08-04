@@ -1,0 +1,3 @@
+--f Y:\Annie\20201111_MStern_DIA_ShortGradient\20201219_16mz_staggered_45min_02.raw
+--f Y:\Annie\20201111_MStern_DIA_ShortGradient\20201219_16mz_staggered_45min_03.raw
+--f Y:\Annie\20201111_MStern_DIA_ShortGradient\20201219_16mz_staggered_45min_01.raw
