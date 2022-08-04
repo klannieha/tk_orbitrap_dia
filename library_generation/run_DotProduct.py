@@ -7,6 +7,7 @@ import numpy as np
 import math
 import os
 import re
+import sys
 from spectral_angle import *
 import seaborn as sns
 import multiprocessing as mp
@@ -22,14 +23,20 @@ def spitTime(func, params):
     return(time)
 
 
-def calculateDotPro(precursor_id, bin_width=0.01, data = EPS_specs):
+def calculateDotPro(precursor_id, bin_width=0.01, data = EPS_specs, categories):
     print("Analyzing dot product for precursor # ", precursor_id)
+    if len(categories) != 2:
+        raise ValueError('Number of categories has to be 2!')
+    else:
+        print("Categories: ", categories)
     specs = data[data['precursor_id'] == precursor_id]
     print("Creating bins")
     bins = Createbins(specs, precursor_id, bin_width)
     print("Subsetting spectra by cohort")
-    binned_spec1 = specs[specs['cohort'] == "uEPS"]
-    binned_spec2 = specs[specs['cohort'] == "dEPS"]
+    binned_spec1 = specs[specs['cohort'] == categories[0]]
+    binned_spec2 = specs[specs['cohort'] == categories[1]]
+    #binned_spec1 = specs[specs['cohort'] == "uEPS"]
+    #binned_spec2 = specs[specs['cohort'] == "dEPS"]
     print("Binning spec 1")
     binned_spec1 = BinSpectrum(binned_spec1, bins.bins)
     binned_spec1 = mp.Array('d', binned_spec1)
@@ -51,7 +58,7 @@ def calculateDotPro(precursor_id, bin_width=0.01, data = EPS_specs):
 base = "/project/6002011/annieha/pca_urine_spectral_lib/data/library"
 libraries = os.listdir(base)
 libraries = [x for x in libraries if re.search("se_filtered_spectrallib.tsv", x)]
-
+# modify to callable commandline arguments
 uEPS = pd.read_csv(os.path.join(base,libraries[0]), sep = "\t")
 dEPS = pd.read_csv(os.path.join(base,libraries[1]), sep = "\t")
 

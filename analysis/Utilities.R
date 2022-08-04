@@ -4,7 +4,7 @@ library(data.table)
 library(stringr)
 library(dbplyr)
 library(reshape2)
-library(VennDiagram)
+#library(VennDiagram)
 library(Matrix)
 library(httr)
 
@@ -268,7 +268,7 @@ annotate_MStern <- function(pyprophet_out){
   return(df)
 }
 
-library(VennDiagram)
+#library(VennDiagram)
 library(RColorBrewer)
 
 create_venn <- function(data, category_names, category_colours, file = NULL){
@@ -298,45 +298,6 @@ create_venn <- function(data, category_names, category_colours, file = NULL){
   }
   grid.newpage()
   grid.draw(v1)
-}
-
-create_venn <- function(nKeys, BrewerPalette, KeyNames, data){
-  #' nKeys: integer number of categories
-  #' BrewerPalette: string choice of brewer palette
-  #' KeyNames: vector of strings  category names
-  #' data: list of data for venn diagram
-  
-  if(nKeys < 3){
-    catfill <- brewer.pal(3, BrewerPalette)
-    catfill <- sample(catfill, 2)
-  }else{
-    catfill <- brewer.pal(nKeys, BrewerPalette)
-  }
-  v1 <- venn.diagram(
-    x = data,
-    scaled=T,
-    area.vector = T,
-    category.names = KeyNames,
-    fill=catfill,
-    col = catfill,
-    filename = NULL,
-    output = FALSE ,
-    imagetype="png" ,
-    height = 480 , 
-    width = 480 , 
-    resolution = 300,
-    compression = "lzw",
-    lwd = 2,
-    cex = 2,
-    fontfamily = "sans",
-    cat.cex = 2,
-    cat.default.pos = "outer",
-    cat.fontfamily = "sans",
-    cat.col = catfill
-  )
-  grid.newpage()
-  grid.draw(v1)
-  return(v1)
 }
 
 fetchQuery <- function(lst){
@@ -415,7 +376,7 @@ map2Gene <- function(protein_id){
   proteinGroups <- rbind(groupP.df, protein_df)
   return(proteinGroups)
 }
-=======
+
 # All functions
 
 library(data.table)
