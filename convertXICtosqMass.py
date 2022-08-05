@@ -11,7 +11,25 @@ import sys
 from pyopenms import *
 
 # pseudo-code:
-# read diann XIC data
+# read diann XIC data only take 1 file at a time (no combined file)
+diann = sys.argv[1]
+xics = pd.read_csv(diann, sep = "\t")
+
+# rename all the column names
+xics = xics.rename(columns = {"Precursor.Id": "PrecursorId", "File.Name": "filename", "Retention.Times": "RetentionTimes", "Theoretical.Mz":"TheoreticalMz", "MS.Level": "MSLevel", "Modified.Sequence":"ModifiedSequence", "Stripped.Sequence":"Sequence"})
+
+runs = xics.filename.unique()
+print("Number of files detected:", len(runs))
+
+# separate xics by file
+xics = xics.loc[xics.filename == runs[0]] 
+
+
+# get values from each row
+
+precursors = xics.PrecursorId.unique()
+
+
 # store as mzML
 exp = MSExperiment()
 
@@ -19,15 +37,6 @@ exp = MSExperiment()
 chromatogram = MSChromatogram()
 
 # set precursor
-# rename all the column names
-xics = xics.rename(columns = {("Precursor.Id": "PrecursorId", "File.Name": "filename", "Retention.Times": "RetentionTimes", "Theoretical.Mz":"TheoreticalMz", "MS.Level": "MSLevel", "Modified.Sequence":"ModifiedSequence", "Stripped.Sequence":"Sequence"})
-
-# separate xics by file
-
-# get values from each row
-
-precursors = xics.PrecursorId.unique()
-
 # assign peaks
 # chromatogram.set_peaks([rt,i])
 
