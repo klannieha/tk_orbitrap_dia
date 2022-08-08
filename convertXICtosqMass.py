@@ -18,9 +18,7 @@ xics = pd.read_csv(diann, sep = "\t")
 xics = xics.reset_index(drop = True)
 # rename all the column names
 xics = xics.rename(columns = {"Precursor.Id": "PrecursorId", "File.Name": "filename", "Retention.Times": "RetentionTimes", "Theoretical.Mz":"TheoreticalMz", "MS.Level": "MSLevel", "Modified.Sequence":"ModifiedSequence", "Stripped.Sequence":"Sequence"})
-
 runs = xics.filename.unique()
-print("Number of files detected:", len(runs))
 
 # separate xics by file
 xics = xics.loc[xics.filename == runs[0]] 
@@ -28,6 +26,7 @@ xics = xics.loc[xics.filename == runs[0]]
 
 # annotate Fragment ions/transitions
 xics = xics.astype({"FragmentSeriesNumber":'str'})
+xics['PrecursorCharge'] = xics.PrecursorId.str[-1].astype("int")
 conditions = [xics["MSLevel"] == 1, xics["MSLevel"] == 2]
 values = [xics["PrecursorId"] + "_Prec", xics["PrecursorId"] + "_" + xics['FragmentSeriesNumber']+xics['FragmentType']]
 xics['FragmentAnnotation'] = np.select(conditions, values)
@@ -55,18 +54,22 @@ transitions = xics.FragmentAnnotation.unique()
 
 trRT = xics.loc[xics.RetentionTimes == 1]
 trInt = xics.loc[xics.Intensities == 1]
-trID = xics[["filename", "TheoreticalMz", "MSLevel", "ModifiedSequence", "Sequence", "PrecursorId", "FragmentType", "FragmentSeriesNumber", "FragmentAnnotation", "FragmentCharge"]].drop_duplicates()
+trID = xics[["filename", "TheoreticalMz", "MSLevel", "ModifiedSequence", "Sequence", "PrecursorId","PrecursorCharge", "FragmentType", "FragmentSeriesNumber", "FragmentAnnotation", "FragmentCharge"]].drop_duplicates()
 
 # start loop
 
 for i in range(0, len(precursors)):
     p = precursors[i]
     tr = trID.loc[trID.PrecursorId == p]
+    pep = tr.ModifiedSequence.unique()[0]
+    mz = tr.loc[trID.MSLevel == 1].TheoreticalMz.values[0]
+    charge = tr.PrecursorCharge.unique()[0]
     tr = tr.reset_index(drop = True)
     tr = tr.FragmentAnnotation
     Prec = Precursor()
-    Prec.setMZ(trID.loc[(trID.PrecursorId == p) & (trID.MSLevel == 1), "TheoreticalMz"].values[0])
-    Prec.setMetaValue("peptide_sequence", trID.loc[trID.PrecursorId == p].ModifiedSequence.unique()[0])
+    Prec.setMZ(mz)
+    Prec.setMetaValue("peptide_sequence", pep)
+    Prec.setCharge(int(charge))
     for j in range(0, len(tr)):
         tID = tr[j]
         chrom = MSChromatogram()
