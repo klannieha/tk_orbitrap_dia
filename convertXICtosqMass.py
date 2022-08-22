@@ -19,9 +19,9 @@ xics = xics.reset_index(drop = True)
 # rename all the column names
 xics = xics.rename(columns = {"Precursor.Id": "PrecursorId", "File.Name": "filename", "Retention.Times": "RetentionTimes", "Theoretical.Mz":"TheoreticalMz", "MS.Level": "MSLevel", "Modified.Sequence":"ModifiedSequence", "Stripped.Sequence":"Sequence"})
 runs = xics.filename.unique()
-
+len(runs)
 # separate xics by file
-xics = xics.loc[xics.filename == runs[0]] 
+#xics = xics.loc[xics.filename == runs[0]] 
 # data columns start from file1.columns[14:600]
 
 # annotate Fragment ions/transitions
