@@ -75,6 +75,7 @@ for i in range(0, len(precursors)):
         chrom = MSChromatogram()
         rt = trRT.loc[trRT.FragmentAnnotation == tID]
         rt = rt.iloc[:, 14:615].values[0]
+        rt = rt * 60 # convert minutes to seconds
         Int = trInt.loc[trInt.FragmentAnnotation == tID]
         Int = Int.iloc[:, 14:615].values[0]
         chrom.set_peaks([rt, Int])
