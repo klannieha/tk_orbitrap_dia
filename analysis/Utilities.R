@@ -1596,7 +1596,7 @@ create_proteinGroup <- function(peptides){
   return(ProteinGroups)
 }
 
-formatFragpipePeptideIntensity <- function(peptidesdf){
+formatFragpipePeptideIntensity <- function(peptidesdf, file = NULL){
   #' This functions is to reformat the diann output to peptides files
   #' peptidesdf    datatable    frappipe output of the DIANN search
   
@@ -1607,6 +1607,9 @@ formatFragpipePeptideIntensity <- function(peptidesdf){
   df.Intensity <- dcast(df, ProteinGroups + Genes + PeptideSequence ~ SampleID, 
                         value.var = "Intensity", fun.aggregate = sum)
   df.Intensity <- as.data.table(df.Intensity)
+  if(!is.null(file)){
+    write.table(df.Intensity, file = file, quote = F, sep = "\t", row.names = F)
+  }
   return(df.Intensity)
 }
 
