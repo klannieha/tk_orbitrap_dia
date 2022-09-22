@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # All functions
 
 library(data.table)
@@ -626,7 +625,6 @@ annotate_pyprophet <- function(pyprophet_out){
 }
 
 
-=======
 # All functions
 
 library(data.table)
@@ -936,36 +934,96 @@ create_venn <- function(data, category_names, category_colours, file = NULL){
 }
 
 
+isJobReady <- function(jobId) {
+  pollingInterval = 5
+  nTries = 20
+  for (i in 1:nTries) {
+    url <- paste("https://rest.uniprot.org/idmapping/status/", jobId, sep = "")
+    r <- GET(url = url, accept_json())
+    status <- content(r, as = "parsed")
+    if (!is.null(status[["results"]]) || !is.null(status[["failedIds"]])) {
+      return(TRUE)
+    }
+    if (!is.null(status[["messages"]])) {
+      print(status[["messages"]])
+      return (FALSE)
+    }
+    Sys.sleep(pollingInterval)
+  }
+  return(FALSE)
+}
+
+getResultsURL <- function(redirectURL) {
+  if (grepl("/idmapping/results/", redirectURL, fixed = TRUE)) {
+    url <- gsub("/idmapping/results/", "/idmapping/stream/", redirectURL)
+  } else {
+    url <- gsub("/results/", "/results/stream/", redirectURL)
+  }
+}
+
+
+
+files = list(
+  ids = ids,
+  from = "UniProtKB_AC-ID",
+  to = "Gene_Name"
+)
+r <- POST(url = "https://rest.uniprot.org/idmapping/run", body = files, encode = "multipart", accept_json())
+submission <- content(r, as = "parsed")
+
+if (isJobReady(submission[["jobId"]])) {
+  url <- paste("https://rest.uniprot.org/idmapping/details/", submission[["jobId"]], sep = "")
+  r <- GET(url = url, accept_json())
+  details <- content(r, as = "parsed")
+  url <- getResultsURL(details[["redirectURL"]])
+  # Using TSV format see: https://www.uniprot.org/help/api_queries#what-formats-are-available
+  url <- paste(url, "?format=tsv", sep = "")
+  r <- GET(url = url, accept_json())
+  resultsTable = read.table(text = content(r), sep = "\t", header=TRUE)
+  print(resultsTable)
+}
+
+
+
 fetchQuery <- function(lst){
   #'lst vecotr list of ids to be fetched
-  url <- "https://www.uniprot.org/uploadlists/"
   
   params = list(
-    from = "ACC+ID",
-    to = "GENENAME",
-    format = "tab",
-    query = paste0(lst, collapse = " ")
+    from = "UniProtKB_AC-ID",
+    to = "Gene_Name",
+    ids = paste0(lst, collapse = ", ")
   )
-  r <- httr::POST(url, body = params, encode = "form")
-  #cat(httr::content(r))
-  return(r)
+  r <- POST(url = "https://rest.uniprot.org/idmapping/run", body = params, encode = "multipart", accept_json())
+  submission <- content(r, as = "parsed")
+  
+  if (isJobReady(submission[["jobId"]])) {
+    url <- paste("https://rest.uniprot.org/idmapping/details/", submission[["jobId"]], sep = "")
+    r <- GET(url = url, accept_json())
+    details <- content(r, as = "parsed")
+    url <- getResultsURL(details[["redirectURL"]])
+    # Using TSV format see: https://www.uniprot.org/help/api_queries#what-formats-are-available
+    url <- paste(url, "?format=tsv", sep = "")
+    r <- GET(url = url, accept_json())
+    resultsTable = read.table(text = content(r), sep = "\t", header=TRUE)
+    #print(resultsTable)
+  } else{
+    
+  }
+  
+  return(resultsTable)
 } 
+
 
 map2Gene <- function(protein_id){
   #' protein_id vector list of protein_ids to be mapped to Gene names
   
   cleanp <- protein_id[!grepl(";", protein_id)] # IDs that are unique, not groups
-  fetch_cleanp <- fetchQuery(cleanp)
-  strsp <- strsplit(content(fetch_cleanp), "\n")[[1]]
-  strsp2 <- strsplit(strsp, "\t")
-  protein_df <- lapply(2:length(strsp), function(x){
-    from <- strsp2[[x]][1]
-    to <- strsp2[[x]][2]
-    c(from, to)
-  })
+  fetch_cleanp <- fetchQuery(cleanp) # results is a table already
   
-  protein_df <- do.call('rbind', protein_df) %>% as.data.table() %>% as.data.table()
-  colnames(protein_df) <- c("ProteinName", "GeneName")
+  protein_df <- fetch_cleanp %>% as.data.table()
+  setnames(protein_df, c("From", "To"), c("ProteinName", "GeneName"))
+
+  
   protein_df <- protein_df[!duplicated(ProteinName)]
   
   # got df with unique protein names and genes
@@ -976,35 +1034,30 @@ map2Gene <- function(protein_id){
   groupP.df <- data.frame(Group = groupP, Canonical = character(length = length(groupP)), stringsAsFactors = F)
   groupP.df$Canonical <- unlist(lapply(groupP, GeneFormat))
   
-  groupP_noIso <- groupP.df$Canonical[!grepl(";", groupP.df$Canonical)] %>% unique()
+  groupP_noIso <- unique(groupP.df$Canonical[!grepl(";", groupP.df$Canonical)])
   # test: 1358
-  fetch_noIso <- fetchQuery(groupP_noIso)
-  s <- strsplit(content(fetch_noIso), "\n")[[1]]
-  s2 <- strsplit(s, "\t")
-  s2 <- do.call('rbind', s2[-1])
-  groupP_noIso <- data.frame(ProteinName = s2[,1], GeneName = s2[, 2],
-                             stringsAsFactors = F)
-  groupP_noIso <- as.data.table(groupP_noIso)
-  groupP_noIso <- groupP_noIso[!duplicated(ProteinName)]
-  #groupP.df <- merge(groupP.df, groupP_noIso, by.x = "Canonical", by.y = "ProteinName")
+  fetch_noIso <- fetchQuery(groupP_noIso) %>%  as.data.table()# again, shows tables as a result
+  
+  setnames(fetch_noIso, c("From", "To"), c("ProteinName", "GeneName"))
+  
+  fetch_noIso <- fetch_noIso[!duplicated(ProteinName)]
   
   groupP <- groupP.df$Canonical[grepl(";", groupP.df$Canonical)] %>% unique()
   groupP.str <- unique(unlist(strsplit(groupP, ";")))
-  fetch_pg <- fetchQuery(groupP.str)
-  s <- strsplit(content(fetch_pg), "\n")[[1]]
-  s2 <- strsplit(s, "\t")
-  s2 <- do.call('rbind', s2[-1]) %>% as.data.frame()
+  fetch_pg <- fetchQuery(groupP.str) %>% as.data.table()
+  
+  fetch_pg <- setnames(fetch_pg, c("From", "To"), c("ProteinName", "GeneName"))
   
   groupP_Iso <- data.frame(ProteinName = groupP, stringsAsFactors = F)
   GeneNames <- lapply(1:nrow(groupP_Iso), function(x){
-    id <- which(s2[, 1] %in% strsplit(groupP_Iso$ProteinName[x], ";")[[1]])
-    g <- paste0(s2[id,2], collapse = ";")
+    id <- which(fetch_pg$ProteinName %in% strsplit(groupP_Iso$ProteinName[x], ";")[[1]])
+    g <- paste0(fetch_pg$GeneName[id], collapse = ";")
     g
   })
   GeneNames <- unlist(GeneNames)
   groupP_Iso$GeneName <- GeneNames
   groupP_Iso <- distinct_all(groupP_Iso)
-  groupP_allIso <- rbind(groupP_noIso, groupP_Iso)
+  groupP_allIso <- rbind(groupP_noIso, groupP_Iso, fetch_noIso)
   groupP.df <- merge(groupP.df, groupP_allIso, by.x = "Canonical", by.y = "ProteinName", all.x = T)
   groupP.df$Canonical <- NULL
   setnames(groupP.df, "Group", "ProteinName")
@@ -1467,4 +1520,94 @@ plot_dotmap <- function(dataset, effectSize_col, background_col, xlabs, yaxis.la
   return(dm)
 }
 
->>>>>>> da128017c5900844dd5761bd1ced6524260f1041
+# reformat fragpipe output
+
+reformat_fragpipe <- function(lstData){
+  #' input is a list of dataset
+  #' reformat the list of fragpipe output to simplier dataset
+  tmp <- do.call('rbind', lstData)
+  tmp <- as.data.table(tmp)
+  tmp <- dplyr::select(tmp, select = -c("Predicted.IM", "IM", "iIM", "Predicted.iIM"))
+  tmp <- tmp[order(-Precursor.Normalised)]
+  tmp <- unique(tmp, by = c("File.Name", "Precursor.Id"))
+  setnames(tmp, c("File.Name", "Stripped.Sequence", "Precursor.Normalised"),
+           c("filename", "PeptideSequence", "Intensity"))
+  return(tmp)
+}
+
+# plot venn for different libraries
+
+
+plot_LibVenn <- function(peptides.lst){
+  #' this is color scheme made for just uEPS dEPS combEPS and sEV
+  fit <- euler(peptides.lst)
+  plt <- plot(fit,
+     #fills = c("#FAE5A1", "lightcoral"),
+     col = 'white',
+     fills = c("#FAE5A1", "#ACE8E9", "#F7BEBE", "palevioletred"),
+     edges = T,
+     quantities = list(fontsize = 18), adjust_labels = T, lwd = 2, 
+     legend = list(fontsize = 24, side = "bottom", nrow = 1, ncol = 4), rotation = 1)
+  return(plt)
+
+}
+
+lib_colors <- list(colors = c("#FAE5A1", "#ACE8E9", "lightgrey", "#F7BEBE"), breaks = c("uEPS1", "dEPS1", "combEPS", "sEV"))
+
+
+# Map fragpipe protein groups from library files
+
+create_proteinGroup <- function(peptides){
+  #' this function is to map shared peptides to proteinGroups
+  #' peptides    dataframe     peptide.tsv from the dda search from fragpipe
+  #' 
+  ProteinGroups <- subset(peptides,
+                          select = c("Protein ID", "Gene", "Mapped Genes", "Mapped Proteins"))
+  
+  ProteinGroups <- unique(ProteinGroups)
+  ProteinGroups$ProteinGroups <- ProteinGroups$`Protein ID`
+  
+  for(i in seq_along(ProteinGroups$`Protein ID`)){
+    entry <- ProteinGroups$`Mapped Proteins`[i]
+    if(grepl("[A-Z]", entry)){
+      if(grepl(",", entry)){
+        pg <- str_split(entry, ", ")[[1]]
+        pgs <- lapply(pg, function(x) sub('^...([^\\|]+).*', '\\1', x))
+        pg <- paste0(pgs, collapse = ";")
+      }else{
+        pg <- sub('^...([^\\|]+).*', '\\1', entry)
+        pg <- paste(ProteinGroups$`Protein ID`[i], pg , sep = ";")}
+      
+      ProteinGroups$ProteinGroups[i] <- pg
+    }
+  }
+  
+  ProteinGroups$Genes <- ProteinGroups$Gene
+  ProteinGroups[grepl("[A-Z]", `Mapped Genes`)]$Genes <- paste(ProteinGroups[grepl("[A-Z]", `Mapped Genes`)]$Gene,
+                                                               ProteinGroups[grepl("[A-Z]", `Mapped Genes`)]$`Mapped Genes`, sep = ";")
+  
+  ProteinGroups$Genes <- gsub("\\,", ";", ProteinGroups$Genes)
+ 
+  ProteinGroups <- merge(ProteinGroups, peptides,
+                               by = c("Protein ID", "Gene", "Mapped Genes", "Mapped Proteins"))
+  
+  ProteinGroups <- subset(ProteinGroups, select = c("Peptide", "ProteinGroups", "Genes", "Protein ID"))
+  ProteinGroups <- unique(ProteinGroups)
+  return(ProteinGroups)
+}
+
+formatFragpipePeptideIntensity <- function(peptidesdf){
+  #' This functions is to reformat the diann output to peptides files
+  #' peptidesdf    datatable    frappipe output of the DIANN search
+  
+  df <- peptidesdf[Global.Q.Value < 0.01]
+  df <- subset(df, select = c("SampleID", "Run", "PeptideSequence", "Protein.Ids", "ProteinGroups",
+                              "Genes", "Precursor.Id", "Intensity"))
+  df <- unique(df)
+  df.Intensity <- dcast(df, ProteinGroups + Genes + PeptideSequence ~ SampleID, 
+                        value.var = "Intensity", fun.aggregate = sum)
+  df.Intensity <- as.data.table(df.Intensity)
+  return(df.Intensity)
+}
+
+
