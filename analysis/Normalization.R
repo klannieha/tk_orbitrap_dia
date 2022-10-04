@@ -34,7 +34,7 @@ if (length(args)==0) {
 peptides <- read.delim(args[1], sep = "\t", header = T)
 
 
-if (!(colnames(peptides) %in% c("Batch", "Run", "log2Intensity"))){
+if (sum(colnames(peptides) %in% c("Batch", "Run", "log2Intensity"))!= 3){
     stop("Missing required columns: Batch, Run, log2Intensity", call.=FALSE)
     }
 
@@ -45,9 +45,10 @@ medianBatches <- peptides %>% group_by(Batch, ID) %>%
 
 
 g <- ggplot(medianBatches, aes(x = ID, y = MedianIntensity)) +
-	geom_point(aes(color = Batch) + stat_smooth(method = 'loess', se = F) +
-	facet_wrap(~Batch, scales = 'free_x') + theme_light(base_size = 16)
+	geom_point(aes(color = Batch)) + stat_smooth(method = 'loess', se = F) +
+      	facet_wrap(~Batch, scales = 'free_x') + theme_light(base_size = 16)
 
+save(peptides, file = args[2]) # save as RData format
 ggsave(g, file = "./median_int_facet.png", width = 10, height = 9)
 
 #----------- Optimize loess spans -------------------------------------------------
@@ -84,7 +85,7 @@ setnames(span_results, "run", "Batch")
 
 g <- span_results %>% mutate(Batch = factor(Batch)) %>%
 	ggplot(aes(x = span, y = RMSE, color = Batch)) + geom_point() +
-	geom_lin() + theme_classic(base_size = 16)
+	geom_line() + theme_classic(base_size = 16)
 
 ggsave(g, file = "./span_results.png", width = 10, height = 8)
 
@@ -112,6 +113,7 @@ g <- medCorr %>% mutate(Batch = factor(Batch)) %>%
   ggplot(aes(x = x, y = fitted, color = Batch)) +
   geom_point() + facet_wrap(~Batch, scales = "free_x") + 
   theme_light()
+
 ggsave(g, file = "./loess_fit.png", width = 10, height = 8) 
 
  
@@ -135,15 +137,16 @@ peptides.int <- dcast(peptides.int, PeptideSequence~SampleID, value.var = 'log2I
 #--------------- Global batch normalization with median centering -----------------------
 
 peptides.norm <- medNorm(peptides.int[, 2:ncol(peptides.int)])
-
+peptides.norm$PeptideSequence <- peptides.int$PeptideSequence
 peptides.norm <- melt(peptides.norm, id.vars = "PeptideSequence", variable.name = "SampleID",
 	value.name = "log2Intensity.Globalcorrected")
 
 peptides.norm <- as.data.table(peptides.norm)
-peptides.norm <- peptides.norm[!is.na(peptides.norm)]
+peptides.norm <- peptides.norm[!is.na(log2Intensity.Globalcorrected)]
 peptides <- merge(peptides, peptides.norm, by = c("PeptideSequence", "SampleID"), all.x = T)
 
 remove(peptides.int)
 remove(peptides.norm)
 
-save(peptides, file = args[2]) # save as RData format
+write.table(peptides, file = args[2], sep = "\t", row.names = F, quote = F)
+
