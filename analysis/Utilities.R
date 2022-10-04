@@ -1323,8 +1323,8 @@ save_svg <- function(plot, file ,show.plot = F, width = 6, height = 8, unit = "i
 
 uEPS.names <- fread("D:/projects/pca_urine_spectral_lib/data/pca_dda/pca_postDRE_urine/uEPS1_names.txt")
 uEPS.names
-uEPS.names$Sample.Old <- str_extract(uEPS.names$Old_name, "S[0-9]+")
-uEPS.names$Sample.New <- str_extract(uEPS.names$New_name, "UP[0-9]+")
+uEPS.names$Sample <- str_extract(uEPS.names$Old_name, "S[0-9]+")
+uEPS.names$SampleID <- str_extract(uEPS.names$New_name, "UP[0-9]+")
 runs_annotation <- fread("D:/projects/pca_urine_spectral_lib/data/openswath/20210201_MStern/annotation.tsv")
 runs_annotation %>% View()
 runs_annotation <- merge(uEPS.names, runs_annotation, by.x = "Sample.Old",
@@ -1552,7 +1552,8 @@ plot_LibVenn <- function(peptides.lst){
 
 }
 
-lib_colors <- list(colors = c("#FAE5A1", "#ACE8E9", "lightgrey", "#F7BEBE"), breaks = c("uEPS1", "dEPS1", "combEPS", "sEV"))
+lib_colors <- list(colors = c("#FAE5A1", "#ACE8E9", "lightgrey", "#F7BEBE"), 
+                   breaks = c("uEPS1", "dEPS1", "combEPS", "sEV"))
 
 
 # Map fragpipe protein groups from library files
