@@ -22,100 +22,127 @@ def spitTime(func, params):
     return(time)
 
 
-def calculateDotPro(precursor_id, bin_width=0.01, data = EPS_specs):
-    print("Analyzing dot product for precursor # ", precursor_id)
-    specs = data[data['precursor_id'] == precursor_id]
-    print("Creating bins")
-    bins = Createbins(specs, precursor_id, bin_width)
-    print("Subsetting spectra by cohort")
-    binned_spec1 = specs[specs['cohort'] == "uEPS"]
-    binned_spec2 = specs[specs['cohort'] == "dEPS"]
-    print("Binning spec 1")
-    binned_spec1 = BinSpectrum(binned_spec1, bins.bins)
-    binned_spec1 = mp.Array('d', binned_spec1)
-    print("Binning spec2")
-    binned_spec2 = BinSpectrum(binned_spec2, bins.bins)
-    binned_spec2 = mp.Array('d', binned_spec2)
-    print("calculating cos simularity")
-    bin_weights = mp.Array('d', bins.weight)
-    DotProduct = NormDotP(binned_spec1, binned_spec2, bins.weight)
-    print("DotProduct of peptide #  ", precursor_id, "is ", DotProduct)
-    out_dp = pd.DataFrame({"peptide" : [specs['FullUniModPeptideName'].values[1]], "charge": [specs["PrecursorCharge"].values[1]], 'Score':[DotProduct[0]]}, columns = ['peptide', 'charge', 'Score'])
-    if precursor_id == 0:
-        print("Started calculating dot products...")
-    return(out_dp)
+#def calculateDotPro(precursor_id, bin_width=0.01, data):
+#    print("Analyzing dot product for precursor # ", precursor_id)
+#    specs = data[data['precursor_id'] == precursor_id]
+#    print("Creating bins")
+#    bins = Createbins(specs, precursor_id, bin_width)
+#    print("Subsetting spectra by cohort")
+#    binned_spec1 = specs[specs['cohort'] == "uEPS"]
+#    binned_spec2 = specs[specs['cohort'] == "dEPS"]
+#    print("Binning spec 1")
+#    binned_spec1 = BinSpectrum(binned_spec1, bins.bins)
+#    binned_spec1 = mp.Array('d', binned_spec1)
+#    print("Binning spec2")
+#    binned_spec2 = BinSpectrum(binned_spec2, bins.bins)
+#    binned_spec2 = mp.Array('d', binned_spec2)
+#    print("calculating cos simularity")
+#    bin_weights = mp.Array('d', bins.weight)
+#    DotProduct = NormDotP(binned_spec1, binned_spec2, bins.weight)
+#    print("DotProduct of peptide #  ", precursor_id, "is ", DotProduct)
+#    out_dp = pd.DataFrame({"peptide" : [specs['FullUniModPeptideName'].values[1]], "charge": [specs["PrecursorCharge"].values[1]], 'Score':[DotProduct[0]]}, columns = ['peptide', 'charge', 'Score'])
+#    if precursor_id == 0:
+#        print("Started calculating dot products...")
+#    return(out_dp)
 
 
 ################ load data #####################
 
-base = "/project/6002011/annieha/pca_urine_spectral_lib/data/library"
+base = "/project/6002011/annieha/pca_urine_spectral_lib/data/library/FragpipeLibrary"
 libraries = os.listdir(base)
-libraries = [x for x in libraries if re.search("se_filtered_spectrallib.tsv", x)]
+libraries = [x for x in libraries if re.search(".tsv", x)]
 
-uEPS = pd.read_csv(os.path.join(base,libraries[0]), sep = "\t")
-dEPS = pd.read_csv(os.path.join(base,libraries[1]), sep = "\t")
+dEPS = pd.read_csv(os.path.join(base, libraries[0]), sep = "\t")
+sEV = pd.read_csv(os.path.join(base, libraries[1]), sep = "\t")
+lEV = pd.read_csv(os.path.join(base, libraries[2]), sep = "\t")
 
-uEPS_unique = uEPS.loc[:, ['FullUniModPeptideName', 'PrecursorCharge']]
-uEPS_unique = uEPS_unique.drop_duplicates()
-print("PostDRE urine unique precursors: ", uEPS_unique.shape[0])
+uEPS = pd.read_csv(os.path.join(base,libraries[3]), sep = "\t")
 
-dEPS_unique = dEPS.loc[:, ['FullUniModPeptideName', 'PrecursorCharge']]
-dEPS_unique = dEPS_unique.drop_duplicates()
-print("DirectEPS unique precursors: ", dEPS_unique.shape[0])
+# intersection peptides
+#peptxt = os.path.join(base, 'peptideIntersect.txt')
+#peptides = peptxt.read().splitlines()
+precursors = pd.read_csv(os.path.join(base, "precursorIntersect.txt"), sep = "\t")
 
-EPS_overlap = pd.merge(uEPS_unique, dEPS_unique, on = ["FullUniModPeptideName", "PrecursorCharge"])
-EPS_overlap = EPS_overlap.assign(precursor_id = range(0, EPS_overlap.shape[0]))
-print("EPS overlapping precursors: ", EPS_overlap.shape[0]) #43564
+precursors = precursors.assign(precursor_id = range(0, precursors.shape[0]))
+
+#uEPS_unique = uEPS.loc[:, ['FullUniModPeptideName', 'PrecursorCharge']]
+#uEPS_unique = uEPS_unique.drop_duplicates()
+#print("PostDRE urine unique precursors: ", uEPS_unique.shape[0])
+
+#dEPS_unique = dEPS.loc[:, ['FullUniModPeptideName', 'PrecursorCharge']]
+#dEPS_unique = dEPS_unique.drop_duplicates()
+#print("DirectEPS unique precursors: ", dEPS_unique.shape[0])
+
+#EPS_overlap = pd.merge(uEPS_unique, dEPS_unique, on = ["FullUniModPeptideName", "PrecursorCharge"])
+#EPS_overlap = EPS_overlap.assign(precursor_id = range(0, EPS_overlap.shape[0]))
+#print("EPS overlapping precursors: ", EPS_overlap.shape[0]) #43564
 
 # Filter for the libraries with the overlapping precursors
 
-uEPS_specs = pd.merge(uEPS, EPS_overlap, on = ["FullUniModPeptideName", "PrecursorCharge"])
+uEPS_specs = pd.merge(uEPS, precursors, on = ["ModifiedPeptideSequence", "PrecursorCharge"])
 uEPS_specs = uEPS_specs.assign(cohort = "uEPS")
-
-dEPS_specs = pd.merge(dEPS, EPS_overlap, on = ["FullUniModPeptideName", "PrecursorCharge"])
+dEPS_specs = pd.merge(dEPS, precursors, on = ["ModifiedPeptideSequence", "PrecursorCharge"])
 dEPS_specs = dEPS_specs.assign(cohort = "dEPS")
+sEV_specs = pd.merge(sEV, precursors, on = ["ModifiedPeptideSequence", "PrecursorCharge"])
+sEV_specs = sEV_specs.assign(cohort = "sEV")
 
-EPS_specs = uEPS_specs.append(dEPS_specs)
-EPS_specs = EPS_specs.sort_values(by = "precursor_id")
+lEV_specs = pd.merge(lEV, precursors, on = ["ModifiedPeptideSequence", "PrecursorCharge"])
+lEV_specs = lEV_specs.assign(cohort = "lEV")
+
+#EPS_specs = uEPS_specs.append(dEPS_specs)
+#EPS_specs = EPS_specs.sort_values(by = "precursor_id")
+
+all_specs = pd.concat([uEPS_specs, dEPS_specs, sEV_specs, lEV_specs], ignore_index = True)
+all_specs = all_specs.drop(columns=['Library'])
+#all_specs = all_specs.rename(columns={'cohort':'Library'})
+
+all_specs = all_specs.sort_values(by = 'precursor_id')
 
 ##################### test ###########################
 
-specs = EPS_specs[EPS_specs['precursor_id'] == 14097]
+s = all_specs[all_specs['precursor_id'] == 107]
 
-bins = Createbins(specs, 14097, 0.005)
-binned_specu = specs[specs['cohort'] == "uEPS"]
-binned_specd = specs[specs['cohort'] == "dEPS"]
+bins = Createbins(s, 107, 0.005)
+binned_specu = s[s['cohort'] == "uEPS"]
+binned_specd = s[s['cohort'] == "dEPS"]
 binned_specu = BinSpectrum(binned_specu, bins.bins)
 binned_specd = BinSpectrum(binned_specd, bins.bins)
 
-dp = NormDotP(binned_specu, binned_specd, bins.weight)
+#dp = NormDotP(binned_specu, binned_specd, bins.weight, 107)
 
 
 ################ Combine pipeline to one #####################
 import time
 # first create the labeled peptides in memory
-precursors = EPS_specs['precursor_id'].unique()
+precursorIDs = all_specs['precursor_id'].unique()
 
 
-binned_specu = dict()
 binned_specu = dict()
 binned_specd = dict()
+binned_specsEV = dict()
+binned_speclEV = dict()
 binned_weights = dict()
 bins = dict()
 print("Creating bins.....")
 start = time.time()
-for p in precursors[0:10]:
-    print("creating bins...")
-    specs = EPS_specs[EPS_specs['precursor_id'] == p]
+for p in range(30000, len(precursorIDs)):
+#    print("creating bins...")
+    specs = all_specs[all_specs['precursor_id'] == p]
     b = Createbins(specs, p, 0.005)
     b1 = specs[specs['cohort'] == 'uEPS']
     b2 = specs[specs['cohort'] == 'dEPS']
+    b3 = specs[specs['cohort'] == 'sEV']
+    b4 = specs[specs['cohort'] == 'lEV']
     b1 = BinSpectrum(b1, b.bins)
 #    binned_specu.append(b1)
     binned_specu[p] = b1
     b2 = BinSpectrum(b2, b.bins.to_numpy())
 #    binned_specd.append(b2)
     binned_specd[p] = b2
+    b3 = BinSpectrum(b3, b.bins)
+    binned_specsEV[p] = b3
+    b4 = BinSpectrum(b4, b.bins)
+    binned_speclEV[p] = b4
 #    binned_weights.append(bins.weight)
     binned_weights[p] = b.weight.to_numpy()
 #    bins.append(bins.bins)
@@ -129,16 +156,36 @@ print("Done processing bins.")
 
 #threads = os.cpu_count()
 threads = 4
-results = pd.DataFrame(columns = ['precursor_id'])
-results = pd.merge(results, EPS_overlap, on="precursor_id")
-args = zip(binned_specu, binned_specd, binned_weights, precursors)
+results = pd.DataFrame()
+results = results.assign(precursor_id = precursorIDs[30000:len(precursorIDs)])
+results = pd.merge(results, precursors.iloc[30000:len(precursorIDs)], on="precursor_id")
+#args = zip(binned_specu, binned_specd, binned_weights, precursorIDs[0:10].tolist())
 
-if __name__ == '__main__':
-    with mp.Pool(processes=4) as pool:
-        cal = pool.map(NormDotP, args)
-        dp = [res for res in cal]
+#args = [(binned_specu[i], binned_specd[i], binned_weights[i], precursorIDs[i]) for i in range(0, 200)] 
+res = []
+res_sEV = []
+res_lEV = []
+
+for i in range(30000:len(precursorIDs)):
+    dp_dEPS = NormDotP(binned_specu, binned_specd, binned_weights, i)
+    dp_sEV = NormDotP(binned_specu, binned_specsEV, binned_weights, i)
+    dp_lEV = NormDotP(binned_specu, binned_speclEV, binned_weights, i)
+    res.append(dp_dEPS[0])
+    res_sEV.append(dp_sEV[0])
+    res_lEV.append(dp_lEV[0])
+
+res = np.hstack(res)
+res_sEV = np.hstack(res_sEV)
+res_lEV = np.hstack(res_lEV)
+
+results = results.assign(dEPS_score = res, sEV_score = res_sEV, lEV_score = res_lEV)
+
+#if __name__ == '__main__':
+#    with mp.Pool(processes=4) as pool:
+#        cal = pool.starmap(NormDotP, args)
+#        dp = [res for res in cal]
         
-results = results.assign("Score", dp)
+#results = results.assign("Score", dp)
 
 #with mp.get_context("spawn").Pool(processes=4) as pool:
 #    cal = pool.map(calculateDotPro, precursors[0:4])
@@ -167,7 +214,7 @@ results = results.assign("Score", dp)
 #
 #base_results = "/project/6002011/annieha/pca_urine_spectral_lib/results/"
 
-#results_df.to_csv(os.path.join(base_results, "overlapping_peptides_spectral_similarity.tsv"), sep = "\t", index = F)
+results.to_csv(os.path.join(base, "20221013_spectral_similarity_fragpipeLibs_batch7.tsv"), sep = "\t", index = False)
 
 
 #if __name__ == '__main__':

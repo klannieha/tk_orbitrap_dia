@@ -1,12 +1,12 @@
 #!/bin/sh
 
 #SBATCH --account=def-tkisling
-#SBATCH --mem-per-cpu=8000M
-#SBATCH --cpus-per-task=2
-#SBATCH --time=0-07:59
+#SBATCH --mem-per-cpu=16000M
+#SBATCH --cpus-per-task=4
+#SBATCH --time=0-00:59
 
-basefolder=/project/6002011/annieha/pca_urine_spectral_lib/src/
-cd $basefolder
+dir=`pwd`
+cd $dir
 
 source /home/annieha/bin/python36/bin/activate
 

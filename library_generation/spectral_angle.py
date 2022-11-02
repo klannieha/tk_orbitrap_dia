@@ -60,12 +60,12 @@ def NormDotP(spec1, spec2, weights, pid):
     spec2 = spec2[pid]
     weights = weights[pid]
     spec1 = spec1 * weights
-    print("finished adding weights")
+   # print("finished adding weights")
     #spec1 = np.multiply(spec1, weights)
     #start = time.time()
     dp = cosine_similarity([spec1], [spec2])
     #end = time.time()
-    print("finished dot product")
+    #print("finished dot product")
     #print("Time used: ", end - start)
     return(dp)
 
