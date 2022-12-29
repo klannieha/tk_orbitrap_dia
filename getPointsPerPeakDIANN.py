@@ -62,7 +62,6 @@ for i in range(0, len(precursors)):
     tr = tr.reset_index(drop = True)
     tr = tr.FragmentAnnotation
     if p in diann.PrecursorId.values:
-        print(p)
         rtstart = diann.loc[diann.PrecursorId == p].RTstart.values[0]
         rtend = diann.loc[diann.PrecursorId == p].RTend.values[0]
         for j in range(0, len(tr)):
