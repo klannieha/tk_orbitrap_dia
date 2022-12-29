@@ -1,14 +1,14 @@
 #!/usr/env python
 
-import sqlite3
+#import sqlite3
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import msproteomicstoolslib.data_structures as db
+#import matplotlib.pyplot as plt
+#import msproteomicstoolslib.data_structures as db
 import SqlDataAccess
 import os
 import sys
-from pyopenms import *
+#from pyopenms import *
 
 # pseudo-code:
 # read diann XIC data only take 1 file at a time (no combined file)
@@ -61,20 +61,22 @@ for i in range(0, len(precursors)):
     charge = tr.PrecursorCharge.unique()[0]
     tr = tr.reset_index(drop = True)
     tr = tr.FragmentAnnotation
-    rtstart = diann.loc[diann.PrecursorId == p].RTstart.values[0]
-    rtend = diann.loc[diann.PrecursorId == p].RTend.values[0]
-    for j in range(0, len(tr)):
-        tID = tr[j]
-        rt = trRT.loc[trRT.FragmentAnnotation == tID]
-        rt = rt.iloc[:, 14:615].values[0]
-        rt0 = (np.abs(rt - rtstart)).argmin() # find the closest number
-        rt1 = (np.abs(rt - rtend)).argmin()
-        Int = trInt.loc[trInt.FragmentAnnotation == tID]
-        Int = Int.iloc[:, 14:615].values[0]
-        Int = Int[rt0:rt1]
-        points = sum(Int > 0)
-        df = {'PrecursorId':p,  'RTStart':rtstart, 'RTStop':rtend, 'FragmentAnnotation':tID, 'Charge':charge, 'Points':points}
-        PointsPerPeak = PointsPerPeak.append(df, ignore_index = True)
+    if p in diann.PrecursorId.values:
+        print(p)
+        rtstart = diann.loc[diann.PrecursorId == p].RTstart.values[0]
+        rtend = diann.loc[diann.PrecursorId == p].RTend.values[0]
+        for j in range(0, len(tr)):
+            tID = tr[j]
+            rt = trRT.loc[trRT.FragmentAnnotation == tID]
+            rt = rt.iloc[:, 14:615].values[0]
+            rt0 = (np.abs(rt - rtstart)).argmin() # find the closest number
+            rt1 = (np.abs(rt - rtend)).argmin()
+            Int = trInt.loc[trInt.FragmentAnnotation == tID]
+            Int = Int.iloc[:, 14:615].values[0]
+            Int = Int[rt0:rt1]
+            points = sum(Int > 0)
+            df = {'PrecursorId':p,  'RTStart':rtstart, 'RTStop':rtend, 'FragmentAnnotation':tID, 'Charge':charge, 'Points':points}
+            PointsPerPeak = PointsPerPeak.append(df, ignore_index = True)
 
 
 PointsPerPeak.to_csv(filename, sep = "\t", index=False)    
