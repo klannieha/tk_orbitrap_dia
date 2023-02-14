@@ -568,7 +568,7 @@ imputeLowerGuassian <- function(data, shift = 2, width = 0.3){
   set.seed(123)
   data[data==0] <- NA
   tmpdf <- melt(data) # get the values of only the Non-zero measurements
-  if(sum(!is.na(tmpdf$value))){
+  if(sum(!is.na(tmpdf$value))==1){
     sdev <- 0.3
   }else{
     sdev <- sd(tmpdf$value, na.rm = T) * width
