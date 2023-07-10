@@ -3,7 +3,7 @@
 #import sqlite3
 import numpy as np
 import pandas as pd
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 #import msproteomicstoolslib.data_structures as db
 import SqlDataAccess
 import os
@@ -13,11 +13,18 @@ import sys
 # pseudo-code:
 # read diann XIC data only take 1 file at a time (no combined file)
 diann = sys.argv[1]
+dirname = os.path.dirname(diann)
 xics = sys.argv[2]
 filename = sys.argv[3]
 diann = pd.read_csv(diann, sep = "\t")
 xics = pd.read_csv(xics, sep = "\t")
 xics = xics.reset_index(drop = True)
+plotting = sys.argv[4]
+plottingIDs = sys.argv[5]
+
+# read peptides for the plots
+plottingPeps = open(plottingIDs, "r").read().split('\n')
+
 # rename all the column names
 diann = diann.rename(columns = {"File.Name":"Filename", "Precursor.Id":"PrecursorId", "RT.Start":"RTstart", "RT.Stop":"RTend"})
 # subset diann output for only necessary columns
@@ -52,6 +59,46 @@ trInt = xics.loc[xics.Intensities == 1]
 trID = xics[["filename", "TheoreticalMz", "MSLevel", "ModifiedSequence", "Sequence", "PrecursorId","PrecursorCharge", "FragmentType", "FragmentSeriesNumber", "FragmentAnnotation", "FragmentCharge"]].drop_duplicates()
 
 # start loop
+if plotting:
+    for i in range(0, len(plottingPeps)):
+        p = plottingPeps[i]
+        print(p)
+        tr = trID.loc[trID.PrecursorId == p]
+        pep = tr.ModifiedSequence.unique()[0]
+        mz = tr.loc[trID.MSLevel == 1].TheoreticalMz.values[0]
+        charge = tr.PrecursorCharge.unique()[0]
+        trRank = trInt.loc[trInt.PrecursorId == p]
+        #trRank["SumIntensity"] = trRank.iloc[:, 14:615].sum(axis="columns").values
+        #trRank['Rank'] = trRank['SumIntensity'].rank(method='dense', ascending=False)
+        #trRank["Top6"] = (trRank.Rank <= 6)
+        #trRank = trRank.drop_duplicates(subset=["FragmentAnnotation", "Rank", "Top6"], keep=False)
+        tr = tr.loc[tr.MSLevel == 2]
+        tr = tr.reset_index(drop = True)
+        tr = tr.FragmentAnnotation
+        if p in diann.PrecursorId.values:
+            rtstart = diann.loc[diann.PrecursorId == p].RTstart.values[0]
+            rtend = diann.loc[diann.PrecursorId == p].RTend.values[0]
+            print("plotting chromatogram for precursor %s" %p)
+            fig, ax = plt.subplots(figsize=(6,5))
+            plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+            #plt.rcParams["font.size"] = "20"
+            for k in range(0, len(tr)):
+                tID = tr[k]
+                #top6 = trRank.loc[trRank.FragmentAnnotation == tID].Top6.values[0]
+                #c = 'r' if top6 else 'k'
+                rt = trRT.loc[trRT.FragmentAnnotation == tID]
+                rt = rt.iloc[:, 14:615].values[0]
+                rt0 = (np.abs(rt - rtstart)).argmin() # find the closest number
+                rt1 = (np.abs(rt - rtend)).argmin()
+                Int = trInt.loc[trInt.FragmentAnnotation == tID]
+                Int = Int.iloc[:, 14:615].values[0]
+                Int = Int[rt0-2:rt1+2]
+                ax.plot(rt[rt0-2:rt1+2], Int, label=tID)
+            ax.set_ylabel("Intensity")
+            ax.set_xlabel("Retention time (min)")
+            fig.show()
+            fig.savefig(os.path.join(dirname,"%s_XIC.pdf" %p), dpi = 600)
+            plt.close(fig)
 
 for i in range(0, len(precursors)):
     p = precursors[i]
