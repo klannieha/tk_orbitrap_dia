@@ -5,12 +5,32 @@ library(data.table)
 library(stringr)
 library(dbplyr)
 library(reshape2)
-#library(VennDiagram)
-#library(Matrix)
+library(VennDiagram)
+library(Matrix)
+library(eulerr)
+wd <- "/Users/annieha/OneDrive - University of Toronto/Attachments/"
+src_wd <- paste0(wd, "source/tk_orbitrap_dia/analysis")
+source(paste0(wd, "projects/pca_uEPS1_spectral_lib/src/Amanda_source.R"))
 
 #################### Functions for Use ###################
 
+# Median normalization
+medNorm <- function(x){
+  med <- apply(x, 2, median, na.rm=T)
+  av.med <- mean(med)
+  norm.factors.med <- av.med/med 
+  y <- as.data.frame(t(t(x) * norm.factors.med))
+  row.names(y) <- row.names(x)
+  return(y)
+}
 
+getCV <- function(x){
+  CV = apply(x, 1, function(y) 100*sd(y, na.rm = T)/mean(y, na.rm = T))
+  mean = apply(x, 1, function(y) mean(y, na.rm = T))
+  x$CV <- CV
+  x$mean <- mean
+  return(x)
+}
 # Reformat tpp library
 GeneFormat <- function(x){
   if(grepl("Subgroup", x)){
@@ -198,19 +218,17 @@ save_svg <- function(plot, file ,show.plot = F, width = 6, height = 8, unit = "i
          device = 'svg')
 }
 
-# uEPS.names <- fread("D:/projects/pca_urine_spectral_lib/data/pca_dda/pca_postDRE_urine/uEPS1_names.txt")
-# uEPS.names
-# uEPS.names$Sample <- str_extract(uEPS.names$Old_name, "S[0-9]+")
-# uEPS.names$SampleID <- str_extract(uEPS.names$New_name, "UP[0-9]+")
-runs_annotation <- fread("D:/projects/pca_urine_spectral_lib/data/openswath/20210201_MStern/annotation.tsv")
-# runs_annotation %>% View()
-# runs_annotation <- merge(uEPS.names, runs_annotation, by.x = "Sample",
-#                         by.y = "Condition", all.x = T)
-# # # #
-runs_annotation$Batch <- gsub("[^0-9]", "", runs_annotation$Batch)
+if(!exists("runs_annotation")){
+  uEPS.names <- fread(paste0(wd, "projects/pca_uEPS1_spectral_lib/data/pca_dda/uEPS1_names.txt"))
+  uEPS.names$Sample <- str_extract(uEPS.names$Old_name, "S[0-9]+")
+  uEPS.names$SampleID <- str_extract(uEPS.names$New_name, "UP[0-9]+")
+  runs_annotation <- fread(paste0(wd, "projects/pca_uEPS1_spectral_lib/data/clinical/annotation.tsv"))
+  runs_annotation <- merge(uEPS.names, runs_annotation, by.x = "Sample",
+                           by.y = "Condition", all.x = T)
+  runs_annotation$Batch <- gsub("[^0-9]", "", runs_annotation$Batch)
+}
 
-
-#------ MQ data extraction ----------------------
+#MQ data extraction 
 readMQ <- function(filename){
   #' This funciontion is to read MQ dataframes
   #' filename    character path
@@ -248,14 +266,17 @@ getMQsubset <- function(dataframe, proteinGroup = T, peptides = F, column.prefix
 }
 
 # read iRTs
-
-iRTs <- fread("D:/projects/pca_urine_spectral_lib/data/irt/irt_transitions.tsv")
+wd <- "/Users/annieha/OneDrive - University of Toronto/Attachments/"
+# 
+iRTs <- list.files(paste0(wd, "/projects/pca_uEPS1_spectral_lib/data"), pattern = "irt", full.names = T)
 iRTs
-iRTs <- iRTs %>%
-  filter(rank == 1) %>%
-  select(`Q1 monoisotopic`, `precursor charge`, `nominal sequence`, `sequence id` ) %>%
-  distinct_all()
+iRTs <- readxl::read_xls(iRTs, sheet = 2)
 
+iRTs <- iRTs %>%
+ filter(rank == 1) %>%
+ select(`Q1 monoisotopic`, `precursor charge`, `nominal sequence`, `sequence id` ) %>%
+ distinct_all()
+# 
 colnames(iRTs) <- c("PrecursorMz", "PrecursorCharge", "Sequence", "PeptideID")
 
 # perform wilcoxon / Mann-Whitney U test per protein
@@ -302,17 +323,29 @@ calculatePeptidelogFC <- function(data, colname, group1, group2, level){
 
 #calculatePeptidelogFC(peptides.top3.lnorm, Grade, `1`, `2+`)
 
-calculateProteinlogFC <- function(data, colname, group1, group2, intensity_col, level){
+calculateProteinlogFC <- function(data, colname, group1, group2, intensity_col, level = "mean", paired = F){
   #' data  long dataframe with Log2Intensity
   #' variable column name
   #' group1 group 1 from the column
   #' group2 group2 from the column
+  stat.res <- data %>% 
+    select({{intensity_col}}, {{colname}}, Gene.names) %>% 
+    mutate(int = {{intensity_col}}, 
+           group = {{colname}}) %>% 
+    group_by(Gene.names) %>% 
+    summarise(pvalue = wilcox.test(int ~ group, paired = paired, exact = F)$p.value) %>% 
+    as.data.table()
+  
   FC <- data %>%
     group_by({{colname}}, Gene.names) %>%
     summarise(Intensity = ifelse(level == "mean", mean({{intensity_col}}, na.rm = T), median({{intensity_col}}, na.rm = T))) %>% 
     pivot_wider(id_cols = "Gene.names", names_from = {{colname}}, values_from = "Intensity") %>%# head()
     mutate(FC = {{group2}} - {{group1}}) %>% 
     as.data.table()
+  
+  FC <- merge(FC, stat.res, by = "Gene.names")
+  FC$FDR <- p.adjust(FC$pvalue, method = "fdr")
+  
   return(FC)
 }
 
@@ -342,31 +375,33 @@ plot_PeptideVolcano <- function(data, label = F, pvalue_column,padj_column, FC_c
 }
  
 
-plot_PGVolcano <- function(data, label = F, label_col, pvalue_column,padj_column, FC_column, sig_level = 0.05, legends = F){
+plot_PGVolcano <- function(data, label = F, label_col, pvalue_column,padj_column, 
+                           FC_column, sig_level = 0.05, legends = F, colours = c("UP" = "red", "DOWN" = "blue")){
   #' data    dataframe with FC and p values
   #' label   boolean   include labels or not
   #' add other legends if needed
   df <- copy(data)
-  
   df <- df %>% mutate(Sig = ifelse({{padj_column}} < sig_level, TRUE, FALSE)) %>%
     mutate(Enriched = case_when((Sig & {{FC_column}} > 0) ~ "UP",
-                                (Sig & {{FC_column}} < 0) ~ "DOWN"))
+                                (Sig & {{FC_column}} < 0) ~ "DOWN")) %>% 
+    as.data.table()
   p <- df %>%
     ggplot(aes(x = {{FC_column}}, y = -log10({{pvalue_column}}))) +
     geom_point(aes(color = Enriched), show.legend = legends) +
-    scale_color_manual(breaks = c("UP", "DOWN"), values = c("red", "blue")) +
+    scale_color_manual(breaks = c("UP", "DOWN"), values = colours) +
     theme_ez()
   
-  if(label){
-    df <- df %>% mutate(LABEL = ifelse(Sig, {{label_col}}, NA))
-    p <- p + geom_label_repel(data = df, aes(label = LABEL), max.overlaps = 30)
+  if(label==TRUE){
+    setnames(df, label_col, "Gene.names")
+    #df <- df %>% mutate(LABEL = ifelse(Sig == TRUE, Gene.names, NA))
+    p <- p + geom_label_repel(data = df[Sig == TRUE], aes(label = Gene.names), max.overlaps = Inf)
   }
   p
   return(p)
 }
 
 
-spot.size.function <- function(x) { 0.1 + (0.0005 * abs(x)); }
+spot.size.function <- function(x) { 0.1 + (1.5* abs(x)); }
 spot.colour.function <- function(x) {
   colours <- rep("white", length(x));
   colours[sign(x) == -1] <- default.colours(2, palette.type = "dotmap")[1];
@@ -397,17 +432,17 @@ plot_dotmap <- function(dataset, effectSize_col, background_col, xlabs, yaxis.la
               yaxis.lab = yaxis.lab,
               xaxis.lab = xlabs, 
               spot.size.function = spot.size.function,
-              spot.colour.function = spot.single.colour.function,
-              #spot.colour.function = spot.colour.function,
+              #spot.colour.function = spot.single.colour.function,
+              spot.colour.function = spot.colour.function,
               key = list(
                 space = "right",
                 points = list(
-                  cex = spot.size.function(seq(-1, 1, 0.2)),
-                  col = default.colours(1, palette.type = "spiral.sunrise"),
+                  cex = spot.size.function(seq(-2, 2, 0.25)),
+                  col = spot.colour.function(seq(-2, 2, 0.25)),
                   pch = 19
                 ),
                 text = list(
-                  lab = as.character(seq(300, 6000, 500)),
+                  lab = as.character(seq(-2, 2, 0.25)),
                   cex = 1.5,
                   adj = 1.0,
                   fontface = "bold"
@@ -450,15 +485,16 @@ reformat_fragpipe <- function(lstData){
 plot_LibVenn <- function(peptides.lst, fills = c("#FAE5A1", "#ACE8E9", "#F7BEBE", "palevioletred")){
   #' this is color scheme made for just uEPS dEPS combEPS and sEV
   fit <- euler(peptides.lst)
+  par(oma = c(5,5,5,5))
   plt <- plot(fit,
      #fills = c("#FAE5A1", "lightcoral"),
      col = 'white',
      fills = fills,
      edges = T,
-     quantities = list(fontsize = 18), adjust_labels = T, lwd = 2, 
-     legend = list(fontsize = 24, side = "bottom", nrow = 1, ncol = length(peptides.lst)), rotation = 1)
+     quantities = list(fontsize = 14), adjust_labels = T, lwd = 2, 
+     legend = list(fontsize = 12, side = "bottom", 
+                   nrow = 1, ncol = length(peptides.lst)), rotation = 1)
   return(plt)
-
 }
 
 lib_colors <- list(colors = c("#FAE5A1", "#ACE8E9", "#F7BEBE", "palevioletred"), 
@@ -466,6 +502,20 @@ lib_colors <- list(colors = c("#FAE5A1", "#ACE8E9", "#F7BEBE", "palevioletred"),
 
 
 # Map fragpipe protein groups from library files
+fetchQuery <- function(lst){
+  #'lst vecotr list of ids to be fetched
+  url <- "https://www.uniprot.org/uploadlists/"
+  params = list(
+    from = "ACC+ID",
+    to = "GENENAME",
+    format = "tsv",
+    query = paste0(lst, collapse = " ")
+  )
+  r <- httr::POST(url, body = params, encode = "form")
+  #cat(httr::content(r))
+  return(r)
+} 
+
 
 create_proteinGroup <- function(peptides){
   #' this function is to map shared peptides to proteinGroups
@@ -526,10 +576,19 @@ formatFragpipePeptideIntensity <- function(peptidesdf, file = NULL){
 theme_ez <- function(){
   theme_classic() %+replace%
     theme(
-      axis.text = element_text(size = 24, face = "plain"),
-      axis.text.x = element_text(vjust = -0.5),
-      axis.title = element_text(size = 24, face = "plain"),
-      axis.title.x = element_text(vjust = -0.6))
+      axis.text = element_text(size = 16, face = "plain"),
+      axis.text.x = element_text(vjust = -0.5, face = 'plain'),
+      axis.title = element_text(size = 20, face = "plain"),
+      axis.title.x = element_text(vjust = -0.6, face = 'plain'),
+      panel.border = element_rect(colour = "black", linewidth = 0.8, fill = "transparent"),
+      legend.position = "bottom", legend.direction = "horizontal", 
+      legend.title = element_text(size = 16, face ="bold"), legend.text = element_text(size = 14))
+}
+
+theme_library_counts <- function(){
+  theme_ez() +
+    theme(axis.title.x = element_blank(), 
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.9))
 }
 
 plot_decile <- function(df, intensity_col, key){
@@ -581,6 +640,231 @@ imputeLowerGuassian <- function(data, shift = 2, width = 0.3){
   data[is.na(data)] <- sample(lowGaussian, missing, replace = T)
   return(data)
 }
+
+plot_UpSet <- function(combination_list, top_axis = seq(0, 40000, 10000), top_axis_label = seq(0, 40000, 10000), top_yaxis_limits = c(0, 42000), bottom_axis = seq(0, 65000, 20000)){
+  ta <- HeatmapAnnotation(
+    " Peptides \nIntersection" = anno_barplot(comb_size(combination_list), height = unit(8, "cm"), 
+                                              axis_param = list(gp = gpar(fontsize = 16),
+                                                                at = top_axis), 
+                                                                ylim = top_yaxis_limits,# ! CHANGE AXES
+                                              labels = top_axis_label),
+    annotation_name_side = "left", annotation_name_rot = 0, annotation_name_align = T,
+    annotation_name_gp = gpar(fontsize = 24))
+  la <- rowAnnotation(
+    "Total peptides" = anno_barplot(set_size(combination_list),
+                                    axis_param = list(direction = 'reverse', 
+                                                      gp = gpar(fontsize = 16),
+                                                      at = bottom_axis),
+                                    width = unit(3, "cm"),
+                                    border = F),
+    annotation_name_side = 'bottom', annotation_name_rot = 0, 
+    annotation_name_gp = gpar(fontsize = 20)
+  )
+  return(UpSet(combination_list, top_annotation = ta, left_annotation = la ))
+}
+
+# formatting
+getPeptides_diann <- function(diann_df){
+  #' function to subset peptide columns for the diann dataframe
+  #' only peptide information is subsetted
+  #' 
+  df <- subset(diann_df, select = c("File.Name","Run", "Protein.Ids", "Genes", 
+                              "Stripped.Sequence", "Modified.Sequence", "Precursor.Charge",
+                              "Precursor.Normalised"))
+  setnames(df, c("Run","Stripped.Sequence", "Modified.Sequence", "Precursor.Charge", "Precursor.Normalised"),
+           c("RunID","PeptideSequence", "ModifiedPeptideSequence", "Charge", "Intensity"))
+  df.int <- dcast(df, PeptideSequence ~ RunID, fun.aggregate = sum, fill = NaN, 
+                  value.var = "Intensity")
+  df.int <- melt(df.int, id.vars = "PeptideSequence", value.name = "Intensity", variable.name = "RunID")
+  df.var <- unique(df, by = c("File.Name", "RunID", "PeptideSequence", "Genes", "Protein.Ids"))
+  df.int <- merge(df.int, df.var, by = c("RunID", 'PeptideSequence'))
+  return(df)
+}
+
+plot_total_pg_barplot <- function(dataset, group, fill, 
+                                  yaxis_limits = c(0, 5010),
+                                  ylab = "No. of proteins \ndetected (DIA)"){
+  #' dataset  df    dataframe of protein grouped data in long format
+  #' group    col_name  column name of the group comparison
+  #' fill     vector of chr    a named vector of colours for the corresponding groups
+  #' yaxis_limits   vector of int   a vector of the yaxis limits
+  #' ylab     chr   yaxis label
+  #' xlab     chr   xaxis label
+  df <- copy(dataset)
+  plt <- df %>% group_by({{group}}) %>% 
+    distinct(Gene.names, Uniprot.IDs) %>% 
+    summarise(Total = n()) %>% 
+    ggplot(aes(x = {{group}}, y = Total)) +
+    geom_col(aes(fill = {{group}}), width = 0.6, colour = 'black', size = 0.3) +
+    geom_text(aes(label = Total), vjust = 1, size = 5) +
+    scale_y_continuous(expand = c(0,0), limits = yaxis_limits, labels = scales::comma) +
+    scale_fill_manual(values = fill) +
+    theme_ez() + ylab(ylab)
+  return(plt)
+}
+
+#plot_total_pg_barplot(uEPS.proteinGroup, Dataset, fill = c(dataset_colours, "uEPS5" = "goldenrod1"))
+
+plot_sample_pg_boxplot <- function(dataset, group, colours, 
+                                  yaxis_limits = c(0, 4100),
+                                  ylab = "No. of proteins \ndetected (DIA)"){
+  #' dataset  df    dataframe of protein grouped data in long format
+  #' group    col_name  column name of the group comparison
+  #' fill     vector of chr    a named vector of colours for the corresponding groups
+  #' yaxis_limits   vector of int   a vector of the yaxis limits
+  #' ylab     chr   yaxis label
+  #' xlab     chr   xaxis label
+  df <- copy(dataset)
+  plt <- df %>% group_by({{group}}, Run) %>% 
+    distinct(Gene.names, Uniprot.IDs) %>% 
+    summarise(Count = n()) %>% 
+    ggplot(aes(x = {{group}}, y = Count)) +
+    geom_quasirandom(aes(colour = {{group}})) +
+    geom_boxplot(fill = "transparent", outlier.shape = F, width = 0.6) +
+    stat_compare_means(method = "wilcox.test", paired = F,label.y.npc = 0.9, label.x = 1.1, size = 5) +
+    scale_y_continuous(expand = c(0,0), limits = yaxis_limits, labels = scales::comma) +
+    scale_colour_manual(values = colours) +
+    theme_ez() + ylab(ylab)
+  return(plt)
+}
+#plot_sample_pg_boxplot(uEPS.proteinGroup, Dataset, colours = c(dataset_colours, "uEPS5" = "goldenrod1"))
+
+plot_sample_pg_lineplot <- function(dataset, group,matching_col, colours, 
+                                   yaxis_limits = c(0, 4100),
+                                   ylab = "No. of proteins \ndetected (DIA)"){
+  #' dataset  df    dataframe of protein grouped data in long format
+  #' group    col_name  column name of the group comparison
+  #' colours     vector of chr    a named vector of colours for the corresponding groups
+  #' yaxis_limits   vector of int   a vector of the yaxis limits
+  #' ylab     chr   yaxis label
+  #' xlab     chr   xaxis label
+  df <- copy(dataset)
+  plt <- df %>% group_by({{group}}, Run, {{matching_col}}) %>% 
+    distinct(Gene.names, Uniprot.IDs) %>% 
+    summarise(Count = n()) %>% 
+    ggplot(aes(x = {{group}}, y = Count)) +
+    geom_point(aes(colour = {{group}})) +
+    geom_line(aes(group = {{matching_col}}), colour = "grey") +
+    geom_boxplot(fill = "transparent", outlier.shape = NA, width = 0.6) +
+    stat_compare_means(method = "wilcox.test", paired = F,label.y.npc = 0.9, label.x = 1.1, size = 5) +
+    scale_y_continuous(expand = c(0,0), limits = yaxis_limits, labels = scales::comma) +
+    scale_colour_manual(values = colours) +
+    theme_ez() + ylab(ylab)
+  return(plt)
+}
+# plot_sample_pg_lineplot(uEPS.proteinGroup, 
+#                         Dataset,matching_col = pkey,
+#                         colours = c(dataset_colours, "uEPS5" = "goldenrod1"))
+
+
+plot_sample_pg_correlation <- function(dataset,dataset_summary, 
+                                       group, group_category = c("inter", "intra"),
+                                       colours = c("darkcyan", "grey"),
+                                       xlabel = "Dataset" ){
+  #' dataset  df    dataframe of protein correlation data in long format
+  #' dataset_summary df   dataframe of the summary of correlation
+  #' group    col_name  column name of the group comparison
+  #' group_category chr   vector of the categories of the group
+  #' colours     vector of chr    a named vector of colours for the corresponding groups
+  #' xlabel     chr   xaxis label
+  df.corr <- copy(dataset)
+  sum.corr <- copy(dataset_summary)
+
+  plt <- df.corr %>% 
+    ggplot(aes(x = {{group}}, y = rho)) +
+    geom_quasirandom(aes(colour = {{group}}), width = 0.3, show.legend = F) +
+    geom_boxplot(fill = "transparent", outlier.shape = NA, width = 0.6) +
+    geom_hline(data = sum.corr, aes(yintercept = MedianRho, colour = {{group}}), lty = 2, show.legend = F) +
+    geom_text(data = sum.corr, aes(label = round(MedianRho, 2), y = MedianRho, colour = {{group}}),
+              x = 2.5, vjust = -0.2, show.legend = F) +
+    stat_compare_means(method = "wilcox.test", paired = F, label.y = 1, label.x = 1.2, size = 5) +
+    scale_y_continuous(expand = c(0,0), limits = c(0, 1.1)) +
+    scale_colour_manual(breaks = {{group_category}}, values = colours) +
+    ylab(expression(rho)) + xlab(xlabel) +
+    theme_ez() 
+  return(plt)
+}
+
+#plot_sample_pg_correlation(uEPS.corr,dataset_summary = uEPS.corr.sum,group = Dataset)
+
+groupISUP <- function(dataset, GG1, GG2, GGS){
+  new_column <- case_when(dataset[[GG1]] == 3 & dataset[[GG2]] == 3 ~ "1",
+                          dataset[[GGS]] == 6 ~ "1",
+                          dataset[[GG1]] == 3 & dataset[[GG2]] == 4 ~ "2",
+                          dataset[[GG1]] == 4 & dataset[[GG2]] == 3 ~ "3",
+                          dataset[[GG1]] == 4 & dataset[[GG2]] == 4 ~ "4",
+                          dataset[[GGS]] == 8 ~ "4",
+                          dataset[[GGS]] > 8 ~ "5",
+                          .default = NA)
+  return(new_column)
+}
+
+treatment_cleanup <- function(procName){
+  #' procName   vector of chr   vector of treatments
+  tx <- copy(procName)
+  tx <- gsub("Active Surveillance|Watchful Waiting", "Active Surveillance & Watchful Waiting", tx)
+  tx <- gsub("DVP|RP", "Radical Prostatectomy", tx)
+  tx <- gsub("Cryoablation(.*)", "Cryoablation", tx)
+  tx <- gsub("AA|LHRH|HORM", "Hormone Therapy", tx)
+  tx[grepl("Beam|Brachytherapy", tx)] <- "Radiation therapy"
+  tx <- gsub("CHEMO", "Chemotherapy", tx)
+  tx <- gsub("ND", "No data", tx)
+  tx[is.na(tx)] <- "No data"
+  tx[grepl("OTHER", tx)] <- "Others"
+  return(tx)
+}
+
+
+isup_colours <- c("1" = "cornsilk",
+                  "2" =  "yellow",
+                  "3" =  "orange",
+                  "4"= "maroon3",
+                  "5" = "red", "No data" = "white")
+
+psa_colours <- c("<4" = "peachpuff", "4-10" = "lightsalmon", "10-20" = "coral",
+                 "20-50" = "orangered", ">50" = "orangered4", "No data" = "white")
+
+psa_categorical_colours <- c("0 - 9.9" = "#FEE6CE", 
+                             "10 - 19.9" = "#FDAE6B", 
+                             ">= 20" = "#E6550D",
+                             "No data" = "white")
+
+df_colours <- c("uEPS1" = "#188B91", "uEPS5" = "#FB8072", "Overlap" = "slategray3")
+
+race_colours <- c("White" = "#4B4B4B", 
+                  "Black" = "#ED6C4C", 
+                  "Asian" = "#4491F1", 
+                  "South Asian" = "#F2A93B",
+                  "Hispanic" = "#CBCCCC",
+                  "No data" = "white")
+
+tx_colours <- c("Active Surveillance & Watchful Waiting" = "khaki",
+                "Radiation therapy" = "tan1",
+                "Radical Prostatectomy" = "firebrick1",
+                "Cryoablation" = "pink1",
+                "Hormone Therapy" = "orchid3", 
+                "Chemotherapy" = "turquoise4",
+                "Others"= "darkslateblue",
+                "No data" = "white")
+
+group_colours <- c("Cancer" = "brown", "Non-cancer" = "aquamarine3")
+ct_colours <- c("T0" = "#FFF7DF",
+                "T1" = "#DDF68B",
+                "T2" = "#6DC46E",
+                "T3" = "#2F6D60", 
+                "No data" = "white")
+
+cM_colours <- c("MX" = "#E6E6E6",
+                "M0" = "grey31", 
+                "M1a" = "#F7BEBE",
+                "M1" = "darkred",
+                "No data" = "white")
+
+cN_colours <- c("NX" = "#E6E6E6",
+                "N0" = "grey31",
+                "N1" = "#45B4BB",
+                "N2" = "#188B91", 
+                "No data" = "white")
 
 
 
